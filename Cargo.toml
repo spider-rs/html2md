@@ -1,13 +1,13 @@
 [package]
 name = "fast_html2md"
-version = "0.0.10"
+version = "0.0.11"
 edition = "2021"
 description = "A fast html2md crate for rust"
 categories = ["development-tools", "parsing", "parser-implementations"]
 keywords = ["html", "markdown", "converter"]
 license = "MIT"
 documentation = "https://docs.rs/fast_html2md"
-repository = "https://github.com/spider-rs/fast_html2md"
+repository = "https://github.com/spider-rs/html2md"
 
 [lib]
 name = "html2md"
