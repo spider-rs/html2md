@@ -1,0 +1,26 @@
+[package]
+name = "fast_html2md"
+version = "0.0.10"
+edition = "2021"
+description = "A fast html2md crate for rust"
+categories = ["development-tools", "parsing", "parser-implementations"]
+keywords = ["html", "markdown", "converter"]
+license = "MIT"
+documentation = "https://docs.rs/fast_html2md"
+repository = "https://github.com/spider-rs/fast_html2md"
+
+[lib]
+name = "html2md"
+
+[dependencies]
+regex = "1"
+markup5ever_rcdom = "0.3.0"
+html5ever = "0.27"
+lazy_static = "1"
+percent-encoding = "2"
+auto_encoder = "0"
+
+[dev-dependencies]
+spectral = "0.6.0"
+pretty_assertions = "0.7.2"
+indoc = "1.0.3"
