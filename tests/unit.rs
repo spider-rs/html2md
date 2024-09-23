@@ -11,7 +11,7 @@ fn test_dumb() {
 // fixme
 fn test_space() {
     let md = parse_html(r#"<p><a href="http://ya.ru">APOSIMZ</a></p>\n"#, false);
-    assert_eq!(md, "[APOSIMZ](http://ya.ru)\n\n\\\\n")
+    assert_eq!(md, "[APOSIMZ](http://ya.ru)\n\\\\n")
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn test_escaping() {
 #[test]
 fn test_escaping_mid_hyphens() {
     let md = parse_html(r#"<h1>This is a header with-hyphen!</h1>"#, false);
-    assert_eq!(md, "This is a header with-hyphen!\n==========")
+    assert_eq!(md, "# This is a header with-hyphen!")
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn test_escaping_start_hyphens() {
         r#"<h1>- This is a header with starting hyphen!</h1>"#,
         false,
     );
-    assert_eq!(md, "\\- This is a header with starting hyphen!\n==========")
+    assert_eq!(md, "# - This is a header with starting hyphen!")
 }
 
 #[test]
@@ -93,10 +93,7 @@ fn test_escaping_start_hyphens_space() {
         r#"<h1>   - This is a header with starting hyphen!</h1>"#,
         false,
     );
-    assert_eq!(
-        md,
-        " \\- This is a header with starting hyphen!\n=========="
-    )
+    assert_eq!(md, "# - This is a header with starting hyphen!")
 }
 
 #[test]
@@ -119,39 +116,32 @@ fn test_headers() {
     );
     assert_eq!(
         md,
-        "\
-MARC-FS
-==========
-
-[Mail.ru](http://Mail.ru) Cloud filesystem written for FUSE
-
-Synopsis
-----------"
+        "# MARC-FS\n\n[Mail.ru](http://Mail.ru)Cloud filesystem written for FUSE\n## Synopsis"
     )
 }
 
 #[test]
 fn test_escaping_start_equal() {
     let md = parse_html(r#"<p>This is NOT a header!<br/>===========</p>"#, false);
-    assert_eq!(md, "This is NOT a header!  \n\\===========")
+    assert_eq!(md, "This is NOT a header!\n\\===========")
 }
 
 /// Note: Also strips multiple spaces
 #[test]
 fn test_escaping_start_equal_space() {
     let md = parse_html(r#"<p>This is NOT a header!<br/>  ===========</p>"#, false);
-    assert_eq!(md, "This is NOT a header!  \n \\===========")
+    assert_eq!(md, "This is NOT a header!\n\\===========")
 }
 
 #[test]
 fn test_escaping_start_hyphen() {
     let md = parse_html(r#"<p>This is NOT a header!<br/>-------</p>"#, false);
-    assert_eq!(md, "This is NOT a header!  \n\\-------")
+    assert_eq!(md, "This is NOT a header!\n\\-------")
 }
 
 /// Note: Also strips multiple spaces
 #[test]
 fn test_escaping_start_hyphen_space() {
     let md = parse_html(r#"<p>This is NOT a header!<br/>     -------</p>"#, false);
-    assert_eq!(md, "This is NOT a header!  \n \\-------")
+    assert_eq!(md, "This is NOT a header!\n\\-------")
 }

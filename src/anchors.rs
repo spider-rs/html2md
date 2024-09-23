@@ -20,7 +20,7 @@ impl TagHandler for AnchorHandler {
                     .find(|attr| attr.name.local.as_bytes() == b"href");
 
                 match href {
-                    Some(link) => link.value.trim_ascii().into(),
+                    Some(link) => link.value.trim().into(),
                     None => String::new(),
                 }
             }

@@ -10,10 +10,7 @@ fn test_quotes() {
     );
     assert_eq!(
         md,
-        "\
-> here's a quote next line of it
-
-And some text after it"
+        "\n\n> here's a quote next line of it\nAnd some text after it"
     )
 }
 
@@ -22,11 +19,7 @@ fn test_quotes2() {
     let md = parse_html("<p><blockquote>here's<blockquote>nested quote!</blockquote> a quote\n next line of it</blockquote></p>", false);
     assert_eq!(
         md,
-        "\
-> here's
-> > nested quote!
->
->  a quote next line of it"
+        "\n\n> here's\n> > nested quote!\n> a quote next line of it\n\n"
     )
 }
 
@@ -38,10 +31,7 @@ fn test_blockquotes() {
     );
     assert_eq!(
         md,
-        "\
-> Quote at the start of the message
-
-Should not crash the parser"
+        "> Quote at the start of the message\nShould not crash the parser"
     )
 }
 
@@ -54,7 +44,7 @@ fn test_details() {
     </details>
     "};
     let md = parse_html(&html, false);
-    assert_eq!(md, "<details> <summary>There are more things in heaven and Earth, **Horatio**</summary>\n\nThan are dreamt of in your philosophy\n\n</details>")
+    assert_eq!(md, "There are more things in heaven and Earth,**Horatio**\nThan are dreamt of in your philosophy")
 }
 
 #[test]

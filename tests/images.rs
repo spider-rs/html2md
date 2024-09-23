@@ -22,20 +22,23 @@ fn test_image_native_without_title() {
 #[test]
 fn test_image_embedded_html() {
     let md = parse_html("<img src=\"https://i.redd.it/un4h28uwtp711.png\" alt=\"comics about Mac and GNU/Linux\" title=\"Look at me, brother\" height=\"150\" width=\"150\" />", false);
-    assert_eq!(md, "<img alt=\"comics about Mac and GNU/Linux\" src=\"https://i.redd.it/un4h28uwtp711.png\" title=\"Look at me, brother\" height=\"150\" width=\"150\" />")
+    assert_eq!(md, "![comics about Mac and GNU/Linux](https://i.redd.it/un4h28uwtp711.png \"Look at me, brother\")")
 }
 
 #[test]
 fn test_image_embedded_with_unsupported_html() {
     // srcset is unsupported in Markdown
     let md = parse_html("<img src=\"https://i.redd.it/07onlc10x5711.png\" alt=\"HACKERMAN\" title=\"When you reboot instead of exiting vim\" height=\"150\" width=\"150\" srcset=\"image1 image2\" align=\"center\" />", false);
-    assert_eq!(md, "<img alt=\"HACKERMAN\" src=\"https://i.redd.it/07onlc10x5711.png\" title=\"When you reboot instead of exiting vim\" height=\"150\" width=\"150\" align=\"center\" />")
+    assert_eq!(md, "![HACKERMAN](https://i.redd.it/07onlc10x5711.png \"When you reboot instead of exiting vim\")")
 }
 
 #[test]
 fn test_image_src_issue() {
     let md = parse_html("<img src=\"https://dybr.ru/img/43/1532265494_android-Kanedias\" width=\"auto\" height=\"500\" >", false);
-    assert_eq!(md, "<img src=\"https://dybr.ru/img/43/1532265494_android-Kanedias\" height=\"500\" width=\"auto\" />")
+    assert_eq!(
+        md,
+        "![](https://dybr.ru/img/43/1532265494_android-Kanedias)"
+    )
 }
 
 #[test]

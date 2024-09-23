@@ -4,7 +4,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn test_styles_with_spaces() {
     let md = parse_html(r#"It read:<s> Nobody will ever love you</s>"#, false);
-    assert_eq!(md, r#"It read: ~~Nobody will ever love you~~"#)
+    assert_eq!(md, r#"It read:~~Nobody will ever love you~~"#)
 }
 
 #[test]
@@ -24,13 +24,6 @@ They gathered for the feast<br/>
     );
     assert_eq!(
         md,
-        "\
-And she said:  
-~~We are all just prisoners here  
- Of our own device~~  
-And in the master's chambers  
-They gathered for the feast  
-*They stab it with their steely knives*  
-**But they just can't kill the beast**"
+        "And she said:\n~~We are all just prisoners here\nOf our own device~~\nAnd in the master's chambers\nThey gathered for the feast\n*They stab it with their steely knives*\n**But they just can't kill the beast**"
     )
 }

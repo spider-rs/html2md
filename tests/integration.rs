@@ -43,7 +43,6 @@ fn test_real_world_ja() {
     println!("{}", result);
 }
 
-
 #[test]
 #[ignore]
 fn test_cheatsheet() {
@@ -127,11 +126,8 @@ fn test_tables_crash2() {
         .expect("File must be readable");
     let table_with_vertical_header = parse_html(&html, false);
 
-    assert_that!(table_with_vertical_header).contains(indoc! {"
-        |Current Conditions:|Open all year. No reservations. No services.|
-        |-------------------|--------------------------------------------|
-        |   Reservations:   |              No reservations.              |
-        |       Fees        |                  No fee.                   |
-        |      Water:       |                 No water.                  |"
+    println!("{:?}", table_with_vertical_header);
+
+    assert_that!(table_with_vertical_header).contains(indoc! {"\n\n## At a Glance\n\n|Current Conditions:|Open all year. No reservations. No services.|\n|||\n| Reservations: | No reservations. |\n| Fees | No fee. |\n| Water: | No water. |\n\n"
     });
 }

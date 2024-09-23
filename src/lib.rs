@@ -129,12 +129,11 @@ fn walk(
         NodeData::Document | NodeData::Doctype { .. } | NodeData::ProcessingInstruction { .. } => {}
         NodeData::Text { ref contents } => {
             let mut text = contents.borrow().to_string();
-            
+
             let inside_pre = result.parent_chain.iter().any(|t| t == "pre");
             if inside_pre {
                 // this is preformatted text, insert as-is
                 result.append_str(&text);
-
             } else if !(text.trim().len() == 0
                 && (result.data.chars().last() == Some('\n')
                     || result.data.chars().last() == Some(' ')))
@@ -147,7 +146,7 @@ fn walk(
                     text = escape_markdown(result, &text);
                 }
                 let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
-                result.append_str(&minified_text.trim_ascii());
+                result.append_str(&minified_text.trim());
             }
         }
         NodeData::Comment { .. } => {} // ignore comments
@@ -158,51 +157,54 @@ fn walk(
             if inside_pre {
                 // don't add any html tags inside the pre section
                 handler = Box::new(DummyHandler::default());
-            } else if custom.contains_key(&tag_name) {
+            } else {
                 match custom.get(&tag_name) {
                     Some(factory) => {
                         // have user-supplied factory, instantiate a handler for this tag
                         handler = factory.instantiate();
                     }
-                    _ => (),
-                }
-            } else {
-                // no user-supplied factory, take one of built-in ones
-                handler = match tag_name.as_ref() {
-                    // containers
-                    "div" | "section" | "header" | "footer" => {
-                        Box::new(ContainerHandler::default())
+                    _ => {
+                        handler = match tag_name.as_ref() {
+                            // containers
+                            "div" | "section" | "header" | "footer" => {
+                                Box::new(ContainerHandler::default())
+                            }
+                            // pagination, breaks
+                            "p" | "br" | "hr" => Box::new(ParagraphHandler::default()),
+                            "q" | "cite" | "blockquote" => Box::new(QuoteHandler::default()),
+                            // spoiler tag
+                            "details" | "summary" => {
+                                Box::new(HtmlCherryPickHandler::new(commonmark))
+                            }
+                            // formatting
+                            "b" | "i" | "s" | "strong" | "em" | "del" => {
+                                Box::new(StyleHandler::default())
+                            }
+                            "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
+                                Box::new(HeaderHandler::default())
+                            }
+                            "pre" | "code" => Box::new(CodeHandler::default()),
+                            // images, links
+                            "img" => Box::new(ImgHandler::new(commonmark)),
+                            "a" => Box::new(AnchorHandler::default()),
+                            // lists
+                            "ol" | "ul" | "menu" => Box::new(ListHandler::default()),
+                            "li" => Box::new(ListItemHandler::default()),
+                            // as-is
+                            "sub" | "sup" => Box::new(IdentityHandler::default()),
+                            // tables, handled fully internally as markdown can't have nested content in tables
+                            // supports only single tables as of now
+                            "table" => Box::new(TableHandler::default()),
+                            "iframe" => Box::new(IframeHandler::default()),
+                            // other
+                            "html" | "head" | "body" => Box::new(DummyHandler::default()),
+                            _ => Box::new(DummyHandler::default()),
+                        }
                     }
-                    // pagination, breaks
-                    "p" | "br" | "hr" => Box::new(ParagraphHandler::default()),
-                    "q" | "cite" | "blockquote" => Box::new(QuoteHandler::default()),
-                    // spoiler tag
-                    "details" | "summary" => Box::new(HtmlCherryPickHandler::new(commonmark)),
-                    // formatting
-                    "b" | "i" | "s" | "strong" | "em" | "del" => Box::new(StyleHandler::default()),
-                    "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => Box::new(HeaderHandler::default()),
-                    "pre" | "code" => Box::new(CodeHandler::default()),
-                    // images, links
-                    "img" => Box::new(ImgHandler::new(commonmark)),
-                    "a" => Box::new(AnchorHandler::default()),
-                    // lists
-                    "ol" | "ul" | "menu" => Box::new(ListHandler::default()),
-                    "li" => Box::new(ListItemHandler::default()),
-                    // as-is
-                    "sub" | "sup" => Box::new(IdentityHandler::default()),
-                    // tables, handled fully internally as markdown can't have nested content in tables
-                    // supports only single tables as of now
-                    "table" => Box::new(TableHandler::default()),
-                    "iframe" => Box::new(IframeHandler::default()),
-                    // other
-                    "html" | "head" | "body" => Box::new(DummyHandler::default()),
-                    _ => Box::new(DummyHandler::default()),
-                };
+                }
             }
         }
     }
-
-    let ignore_tags = tag_name == "style" || tag_name == "script";
 
     // handle this tag, while it's not in parent chain
     // and doesn't have child siblings
@@ -216,10 +218,10 @@ fn walk(
     result.siblings.insert(current_depth, vec![]);
 
     for child in input.children.borrow().iter() {
-        if handler.skip_descendants() || ignore_tags {
+        if handler.skip_descendants() {
             continue;
         }
-  
+
         walk(&child, result, custom, commonmark);
 
         match child.data {
