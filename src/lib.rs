@@ -77,6 +77,7 @@ pub fn parse_html_custom(
         Ok(dom) => {
             let mut result = StructuredPrinter::default();
             walk(&dom.document, &mut result, custom, commonmark);
+            // we want to eventually remove the clean step.
             clean_markdown(&result.data)
         }
         _ => Default::default(),
@@ -128,10 +129,12 @@ fn walk(
         NodeData::Document | NodeData::Doctype { .. } | NodeData::ProcessingInstruction { .. } => {}
         NodeData::Text { ref contents } => {
             let mut text = contents.borrow().to_string();
-            let inside_pre = result.parent_chain.iter().any(|tag| tag == "pre");
+            
+            let inside_pre = result.parent_chain.iter().any(|t| t == "pre");
             if inside_pre {
                 // this is preformatted text, insert as-is
                 result.append_str(&text);
+
             } else if !(text.trim().len() == 0
                 && (result.data.chars().last() == Some('\n')
                     || result.data.chars().last() == Some(' ')))
@@ -139,19 +142,18 @@ fn walk(
                 // in case it's not just a whitespace after the newline or another whitespace
 
                 // regular text, collapse whitespace and newlines in text
-                let inside_code = result.parent_chain.iter().any(|tag| tag == "code");
+                let inside_code = result.parent_chain.iter().any(|t| t == "code");
                 if !inside_code {
                     text = escape_markdown(result, &text);
                 }
                 let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
-                let minified_text = minified_text.trim_matches(|ch: char| ch == '\n' || ch == '\r');
-                result.append_str(&minified_text);
+                result.append_str(&minified_text.trim_ascii());
             }
         }
         NodeData::Comment { .. } => {} // ignore comments
         NodeData::Element { ref name, .. } => {
-            tag_name = name.local.to_string();
             let inside_pre = result.parent_chain.iter().any(|tag| tag == "pre");
+            tag_name = name.local.to_string();
 
             if inside_pre {
                 // don't add any html tags inside the pre section
@@ -200,22 +202,24 @@ fn walk(
         }
     }
 
+    let ignore_tags = tag_name == "style" || tag_name == "script";
+
     // handle this tag, while it's not in parent chain
     // and doesn't have child siblings
     handler.handle(&input, result);
 
     // save this tag name as parent for child nodes
-    result.parent_chain.push(tag_name.to_string()); // e.g. it was ["body"] and now it's ["body", "p"]
+    result.parent_chain.push(tag_name.clone()); // e.g. it was ["body"] and now it's ["body", "p"]
     let current_depth = result.parent_chain.len(); // e.g. it was 1 and now it's 2
 
     // create space for siblings of next level
     result.siblings.insert(current_depth, vec![]);
 
     for child in input.children.borrow().iter() {
-        if handler.skip_descendants() {
+        if handler.skip_descendants() || ignore_tags {
             continue;
         }
-
+  
         walk(&child, result, custom, commonmark);
 
         match child.data {

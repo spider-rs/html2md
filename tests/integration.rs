@@ -21,6 +21,31 @@ fn test_marcfs() {
 
 #[test]
 #[ignore]
+fn test_real_world() {
+    let mut html = String::new();
+    let mut html_file = File::open("test-samples/real-world-1.html").unwrap();
+    html_file
+        .read_to_string(&mut html)
+        .expect("File must be readable");
+    let result = parse_html(&html, false);
+    println!("{}", result);
+}
+
+#[test]
+#[ignore]
+fn test_real_world_ja() {
+    let mut html = String::new();
+    let mut html_file = File::open("test-samples/real-world-ja-1.html").unwrap();
+    html_file
+        .read_to_string(&mut html)
+        .expect("File must be readable");
+    let result = parse_html(&html, false);
+    println!("{}", result);
+}
+
+
+#[test]
+#[ignore]
 fn test_cheatsheet() {
     let mut html = String::new();
     let mut md = String::new();
