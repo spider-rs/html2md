@@ -229,8 +229,5 @@ where
 fn to_text(tag: &Handle, commonmark: bool) -> String {
     let mut printer = StructuredPrinter::default();
     walk(tag, &mut printer, &HashMap::default(), commonmark);
-
-    let result = clean_markdown(&printer.data);
-
-    result.replace("\n", "<br/>")
+    clean_markdown(&printer.data)
 }

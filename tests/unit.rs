@@ -145,3 +145,13 @@ fn test_escaping_start_hyphen_space() {
     let md = parse_html(r#"<p>This is NOT a header!<br/>     -------</p>"#, false);
     assert_eq!(md, "This is NOT a header!\n\\-------")
 }
+
+/// Note: Also strips multiple spaces
+#[test]
+fn test_escaping_sup_tags() {
+    let md = parse_html(
+        r#"<p>This is NOT a header!<br/><sup>something</sup>     -------</p>"#,
+        false,
+    );
+    assert_eq!(md, "This is NOT a header!\nsomething-------")
+}

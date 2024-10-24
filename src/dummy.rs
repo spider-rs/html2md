@@ -16,14 +16,28 @@ impl TagHandler for DummyHandler {
 
 /// Handler that completely copies tag to printer as HTML with all descendants
 #[derive(Default)]
-pub(super) struct IdentityHandler;
+pub(super) struct IdentityHandler {
+    /// Commonmark spec
+    pub commonmark: bool,
+}
+
+impl IdentityHandler {
+    /// A new identity handler.
+    pub fn new(commonmark: bool) -> Self {
+        Self { commonmark }
+    }
+}
 
 impl TagHandler for IdentityHandler {
     fn handle(&mut self, tag: &Handle, printer: &mut StructuredPrinter) {
         let mut buffer = vec![];
 
         let options = SerializeOpts {
-            traversal_scope: TraversalScope::IncludeNode,
+            traversal_scope: if self.commonmark {
+                TraversalScope::IncludeNode
+            } else {
+                TraversalScope::ChildrenOnly(None)
+            },
             ..Default::default()
         };
         let to_be_serialized = SerializableHandle::from(tag.clone());

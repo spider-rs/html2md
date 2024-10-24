@@ -50,5 +50,7 @@ fn test_details() {
 #[test]
 fn test_subsup() {
     let md = parse_html("X<sub>2</sub>", false);
+    assert_eq!(md, r#"X2"#);
+    let md = parse_html("X<sub>2</sub>", true);
     assert_eq!(md, r#"X<sub>2</sub>"#)
 }

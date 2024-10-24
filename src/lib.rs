@@ -125,12 +125,38 @@ fn walk(
     let mut handler: Box<dyn TagHandler> = Box::new(DummyHandler::default());
     let mut tag_name = String::default();
 
+    let mut inside_pre = false;
+    let mut inside_code = false;
+    let mut ignore_write = false;
+
+    let find_parent_tags = match &input.data {
+        NodeData::Element { .. } => true,
+        NodeData::Text { .. } => true,
+        _ => false,
+    };
+
+    if find_parent_tags {
+        for tag in result.parent_chain.iter() {
+            if tag == "code" {
+                inside_code = true;
+                break;
+            }
+            if tag == "pre" {
+                inside_pre = true;
+                break;
+            }
+            if tag_name == "script" || tag_name == "style" {
+                ignore_write = true;
+                break;
+            }
+        }
+    }
+
     match input.data {
         NodeData::Document | NodeData::Doctype { .. } | NodeData::ProcessingInstruction { .. } => {}
         NodeData::Text { ref contents } => {
             let mut text = contents.borrow().to_string();
 
-            let inside_pre = result.parent_chain.iter().any(|t| t == "pre");
             if inside_pre {
                 // this is preformatted text, insert as-is
                 result.append_str(&text);
@@ -138,21 +164,24 @@ fn walk(
                 && (result.data.chars().last() == Some('\n')
                     || result.data.chars().last() == Some(' ')))
             {
-                // in case it's not just a whitespace after the newline or another whitespace
+                if !ignore_write {
+                    if !inside_code {
+                        text = escape_markdown(result, &text);
+                    }
 
-                // regular text, collapse whitespace and newlines in text
-                let inside_code = result.parent_chain.iter().any(|t| t == "code");
-                if !inside_code {
-                    text = escape_markdown(result, &text);
+                    let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
+                    result.append_str(&minified_text.trim());
                 }
-                let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
-                result.append_str(&minified_text.trim());
             }
         }
         NodeData::Comment { .. } => {} // ignore comments
         NodeData::Element { ref name, .. } => {
-            let inside_pre = result.parent_chain.iter().any(|tag| tag == "pre");
             tag_name = name.local.to_string();
+
+            // do not parse scripts or style tags
+            if tag_name == "script" || tag_name == "style" {
+                return;
+            }
 
             if inside_pre {
                 // don't add any html tags inside the pre section
@@ -191,13 +220,11 @@ fn walk(
                             "ol" | "ul" | "menu" => Box::new(ListHandler::default()),
                             "li" => Box::new(ListItemHandler::default()),
                             // as-is
-                            "sub" | "sup" => Box::new(IdentityHandler::default()),
+                            "sub" | "sup" => Box::new(IdentityHandler::new(commonmark)),
                             // tables, handled fully internally as markdown can't have nested content in tables
                             // supports only single tables as of now
                             "table" => Box::new(TableHandler::default()),
                             "iframe" => Box::new(IframeHandler::default()),
-                            // other
-                            "html" | "head" | "body" => Box::new(DummyHandler::default()),
                             _ => Box::new(DummyHandler::default()),
                         }
                     }
@@ -226,7 +253,14 @@ fn walk(
 
         match child.data {
             NodeData::Element { ref name, .. } => match result.siblings.get_mut(&current_depth) {
-                Some(el) => el.push(name.local.to_string()),
+                Some(el) => {
+                    let eln = name.local.to_string();
+                    let ignore_push = eln == "script" || eln == "style";
+
+                    if !ignore_push {
+                        el.push(eln)
+                    }
+                }
                 _ => (),
             },
             _ => (),
