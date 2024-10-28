@@ -26,14 +26,14 @@ impl TagHandler for TableHandler {
 
         // detect row count
         let most_big_row = rows.iter().max_by(|left, right| {
-            collect_children(&left, any_matcher)
+            collect_children(left, any_matcher)
                 .len()
-                .cmp(&collect_children(&right, any_matcher).len())
+                .cmp(&collect_children(right, any_matcher).len())
         });
 
         if most_big_row.is_some() {
             let column_count = match most_big_row {
-                Some(tag) => collect_children(&tag, any_matcher).len(),
+                Some(tag) => collect_children(tag, any_matcher).len(),
                 _ => 0,
             };
 
@@ -160,9 +160,9 @@ fn pad_cell_text(tag: &Option<&Handle>, column_width: usize, commonmark: bool) -
         if len_diff > 0 {
             // should pad
             if len_diff > 1 {
-                result.push_str(&" ");
+                result.push(' ');
                 result.push_str(&text);
-                result.push_str(&" ");
+                result.push(' ');
             } else {
                 // it's just one space, add at the end
                 result.push_str(&text);
@@ -174,7 +174,7 @@ fn pad_cell_text(tag: &Option<&Handle>, column_width: usize, commonmark: bool) -
         }
     } else {
         // no text in this cell, fill cell with spaces
-        result.push_str(&" ");
+        result.push(' ');
     }
 
     result
@@ -183,10 +183,10 @@ fn pad_cell_text(tag: &Option<&Handle>, column_width: usize, commonmark: bool) -
 /// Extracts tag name from passed tag
 /// Returns empty string if it's not an html element
 fn tag_name(tag: &Handle) -> String {
-    return match tag.data {
+    match tag.data {
         NodeData::Element { ref name, .. } => name.local.to_string(),
         _ => String::new(),
-    };
+    }
 }
 
 /// Find descendants of this tag with tag name `name`
@@ -195,11 +195,11 @@ fn find_children(tag: &Handle, name: &str) -> Vec<Handle> {
     let mut result: Vec<Handle> = vec![];
     let children = tag.children.borrow();
     for child in children.iter() {
-        if tag_name(&child) == name {
+        if tag_name(child) == name {
             result.push(child.clone());
         }
 
-        let mut descendants = find_children(&child, name);
+        let mut descendants = find_children(child, name);
         result.append(&mut descendants);
     }
 
@@ -216,7 +216,7 @@ where
     let children = tag.children.borrow();
 
     for child in children.iter() {
-        if predicate(&child) {
+        if predicate(child) {
             result.push(child.clone());
         }
     }

@@ -43,7 +43,7 @@ fn test_details() {
         <p>Than are dreamt of in your philosophy</p>
     </details>
     "};
-    let md = parse_html(&html, false);
+    let md = parse_html(html, false);
     assert_eq!(md, "There are more things in heaven and Earth,**Horatio**\nThan are dreamt of in your philosophy")
 }
 

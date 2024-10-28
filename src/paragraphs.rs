@@ -15,12 +15,8 @@ impl TagHandler for ParagraphHandler {
             _ => String::new(),
         };
 
-        // insert newlines at the start of paragraph
-        match self.paragraph_type.as_ref() {
-            "p" => {
-                printer.insert_newline();
-            }
-            _ => (),
+        if <std::string::String as std::convert::AsRef<str>>::as_ref(&self.paragraph_type) == "p" {
+            printer.insert_newline();
         }
     }
 

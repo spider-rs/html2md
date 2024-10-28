@@ -55,7 +55,7 @@ impl TagHandler for IdentityHandler {
     }
 
     fn skip_descendants(&self) -> bool {
-        return true;
+        true
     }
 
     fn after_handle(&mut self, _printer: &mut StructuredPrinter) {}
@@ -81,31 +81,29 @@ impl HtmlCherryPickHandler {
 
 impl TagHandler for HtmlCherryPickHandler {
     fn handle(&mut self, tag: &Handle, printer: &mut StructuredPrinter) {
-        match tag.data {
-            NodeData::Element {
-                ref name,
-                ref attrs,
-                ..
-            } => {
-                let attrs = attrs.borrow();
-                self.tag_name = name.local.to_string();
+        if let NodeData::Element {
+            ref name,
+            ref attrs,
+            ..
+        } = tag.data
+        {
+            let attrs = attrs.borrow();
+            self.tag_name = name.local.to_string();
 
-                if self.commonmark {
-                    printer.append_str(&format!("<{}", self.tag_name));
+            if self.commonmark {
+                printer.append_str(&format!("<{}", self.tag_name));
 
-                    for attr in attrs.iter() {
-                        printer.append_str(&format!(" {}=\"{}\"", attr.name.local, attr.value));
-                    }
-
-                    printer.append_str(">");
+                for attr in attrs.iter() {
+                    printer.append_str(&format!(" {}=\"{}\"", attr.name.local, attr.value));
                 }
+
+                printer.append_str(">");
             }
-            _ => return,
         }
     }
 
     fn skip_descendants(&self) -> bool {
-        return false;
+        false
     }
 
     fn after_handle(&mut self, printer: &mut StructuredPrinter) {

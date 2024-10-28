@@ -50,15 +50,12 @@ impl TagHandler for ListItemHandler {
                 return;
             }
 
-            match nearest_parent_list {
-                Some(s) => {
-                    self.list_type = s.to_string();
-                }
-                _ => (),
+            if let Some(s) = nearest_parent_list {
+                self.list_type = s.to_string();
             }
         }
 
-        if printer.data.chars().last() != Some('\n') {
+        if !printer.data.ends_with('\n') {
             // insert newline when declaring a list item only in case there isn't any newline at the end of text
             printer.insert_newline();
         }
@@ -85,8 +82,8 @@ impl TagHandler for ListItemHandler {
         // list element, not an empty line
         let index = self.start_pos;
         while index < printer.data.len() {
-            if printer.data.bytes().nth(index) == Some(b'\n')
-                || printer.data.bytes().nth(index) == Some(b' ')
+            if printer.data.as_bytes().get(index).copied() == Some(b'\n')
+                || printer.data.as_bytes().get(index).copied() == Some(b' ')
             {
                 printer.data.remove(index);
             } else {
@@ -98,7 +95,7 @@ impl TagHandler for ListItemHandler {
         // list item except first should be indented with at least 1 space
         let mut index = printer.data.len();
         while index > self.start_pos {
-            if printer.data.bytes().nth(index) == Some(b'\n') {
+            if printer.data.as_bytes().get(index).copied() == Some(b'\n') {
                 printer.insert_str(index + 1, &" ".repeat(padding));
             }
             index -= 1;

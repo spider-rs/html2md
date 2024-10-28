@@ -124,18 +124,17 @@ fn walk(
     custom: &HashMap<String, Box<dyn TagHandlerFactory>>,
     commonmark: bool,
 ) {
-    let mut handler: Box<dyn TagHandler> = Box::new(DummyHandler::default());
+    let mut handler: Box<dyn TagHandler> = Box::new(DummyHandler);
     let mut tag_name = String::default();
 
     let mut inside_pre = false;
     let mut inside_code = false;
     let mut ignore_write = false;
 
-    let find_parent_tags = match &input.data {
-        NodeData::Element { .. } => true,
-        NodeData::Text { .. } => true,
-        _ => false,
-    };
+    let find_parent_tags = matches!(
+        &input.data,
+        NodeData::Element { .. } | NodeData::Text { .. }
+    );
 
     if find_parent_tags {
         for tag in result.parent_chain.iter() {
@@ -162,18 +161,16 @@ fn walk(
             if inside_pre {
                 // this is preformatted text, insert as-is
                 result.append_str(&text);
-            } else if !(text.trim().len() == 0
-                && (result.data.chars().last() == Some('\n')
-                    || result.data.chars().last() == Some(' ')))
+            } else if !(text.trim().is_empty()
+                && (result.data.ends_with('\n') || result.data.ends_with(' ')))
+                && !ignore_write
             {
-                if !ignore_write {
-                    if !inside_code {
-                        text = escape_markdown(result, &text);
-                    }
-
-                    let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
-                    result.append_str(&minified_text.trim());
+                if !inside_code {
+                    text = escape_markdown(result, &text);
                 }
+
+                let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
+                result.append_str(minified_text.trim());
             }
         }
         NodeData::Comment { .. } => {} // ignore comments
@@ -187,7 +184,7 @@ fn walk(
 
             if inside_pre {
                 // don't add any html tags inside the pre section
-                handler = Box::new(DummyHandler::default());
+                handler = Box::new(DummyHandler);
             } else {
                 match custom.get(&tag_name) {
                     Some(factory) => {
@@ -197,9 +194,7 @@ fn walk(
                     _ => {
                         handler = match tag_name.as_ref() {
                             // containers
-                            "div" | "section" | "header" | "footer" => {
-                                Box::new(ContainerHandler::default())
-                            }
+                            "div" | "section" | "header" | "footer" => Box::new(ContainerHandler),
                             // pagination, breaks
                             "p" | "br" | "hr" => Box::new(ParagraphHandler::default()),
                             "q" | "cite" | "blockquote" => Box::new(QuoteHandler::default()),
@@ -219,15 +214,15 @@ fn walk(
                             "img" => Box::new(ImgHandler::new(commonmark)),
                             "a" => Box::new(AnchorHandler::default()),
                             // lists
-                            "ol" | "ul" | "menu" => Box::new(ListHandler::default()),
+                            "ol" | "ul" | "menu" => Box::new(ListHandler),
                             "li" => Box::new(ListItemHandler::default()),
                             // as-is
                             "sub" | "sup" => Box::new(IdentityHandler::new(commonmark)),
                             // tables, handled fully internally as markdown can't have nested content in tables
                             // supports only single tables as of now
                             "table" => Box::new(TableHandler::default()),
-                            "iframe" => Box::new(IframeHandler::default()),
-                            _ => Box::new(DummyHandler::default()),
+                            "iframe" => Box::new(IframeHandler),
+                            _ => Box::new(DummyHandler),
                         }
                     }
                 }
@@ -237,7 +232,7 @@ fn walk(
 
     // handle this tag, while it's not in parent chain
     // and doesn't have child siblings
-    handler.handle(&input, result);
+    handler.handle(input, result);
 
     // save this tag name as parent for child nodes
     result.parent_chain.push(tag_name.clone()); // e.g. it was ["body"] and now it's ["body", "p"]
@@ -251,21 +246,17 @@ fn walk(
             continue;
         }
 
-        walk(&child, result, custom, commonmark);
+        walk(child, result, custom, commonmark);
 
-        match child.data {
-            NodeData::Element { ref name, .. } => match result.siblings.get_mut(&current_depth) {
-                Some(el) => {
-                    let eln = name.local.to_string();
-                    let ignore_push = eln == "script" || eln == "style";
+        if let NodeData::Element { ref name, .. } = child.data {
+            if let Some(el) = result.siblings.get_mut(&current_depth) {
+                let eln = name.local.to_string();
+                let ignore_push = eln == "script" || eln == "style";
 
-                    if !ignore_push {
-                        el.push(eln)
-                    }
+                if !ignore_push {
+                    el.push(eln)
                 }
-                _ => (),
-            },
-            _ => (),
+            }
         };
     }
 
@@ -285,7 +276,7 @@ fn walk(
 /// like list start or bold text style
 fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
     // always escape bold/italic/strikethrough
-    let data: std::borrow::Cow<str> = MARKDOWN_MIDDLE_KEYCHARS.replace_all(&text, "\\$0");
+    let data: std::borrow::Cow<str> = MARKDOWN_MIDDLE_KEYCHARS.replace_all(text, "\\$0");
 
     // if we're at the start of the line we need to escape list- and quote-starting sequences
     let data = if START_OF_LINE_PATTERN.is_match(&result.data) {
@@ -305,20 +296,17 @@ fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
 fn clean_markdown(text: &str) -> String {
     CLEANUP_PATTERN
         .replace_all(text, |caps: &regex::Captures| {
-            if caps.name("empty_line").is_some() {
+            if caps.name("empty_line").is_some()
+                || caps.name("leading_newlines").is_some()
+                || caps.name("last_whitespace").is_some()
+                || caps.name("empty_image").is_some()
+                || caps.name("leading_whitespace").is_some()
+            {
                 "".to_string()
             } else if caps.name("excessive_newlines").is_some() {
                 "\n\n".to_string()
             } else if let Some(trailing_match) = caps.name("trailing_space") {
                 trailing_match.as_str().trim_end().to_string()
-            } else if caps.name("leading_newlines").is_some() {
-                "".to_string()
-            } else if caps.name("last_whitespace").is_some() {
-                "".to_string()
-            } else if caps.name("empty_image").is_some() {
-                "".to_string()
-            } else if caps.name("leading_whitespace").is_some() {
-                "".to_string()
             } else {
                 caps[0].to_string()
             }
