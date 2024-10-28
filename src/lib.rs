@@ -65,6 +65,7 @@ lazy_static! {
 /// # Arguments
 /// `html` is source HTML as `String`
 /// `custom` is custom tag hadler producers for tags you want, can be empty
+/// `commonmark` is for adjusting markdown output to commonmark
 pub fn parse_html_custom(
     html: &str,
     custom: &HashMap<String, Box<dyn TagHandlerFactory>>,
@@ -88,13 +89,14 @@ pub fn parse_html_custom(
 /// and returns converted string.
 /// # Arguments
 /// `html` is source HTML as `String`
+/// `commonmark` to change the markdown flavor to commonmark as `boolean`
 pub fn parse_html(html: &str, commonmark: bool) -> String {
     parse_html_custom(html, &HashMap::default(), commonmark)
 }
 
 /// Same as `parse_html` but retains all "span" html elements intact
 /// Markdown parsers usually strip them down when rendering but they
-/// may be useful for later processing
+/// may be useful for later processing.
 pub fn parse_html_extended(html: &str, commonmark: bool) -> String {
     struct SpanAsIsTagFactory;
 
