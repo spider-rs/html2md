@@ -45,6 +45,18 @@ fn test_anchor3() {
 }
 
 #[test]
+/// The destination can only contain spaces if it is enclosed in pointy brackets:  
+/// [Commonmark: Example 489](https://spec.commonmark.org/0.31.2/#example-489)
+fn test_anchor4() {
+    let md = parse_html(r#"<p><a href="/my%20uri">link</a></p>"#, false);
+    assert_eq!(
+        md,
+        "\
+[link](</my uri>)"
+    )
+}
+
+#[test]
 fn test_image() {
     let md = parse_html(
         r#"<p><a href="https://gitter.im/MARC-FS/Lobby?utm_source=badge&amp;utm_medium=badge&amp;utm_campaign=pr-badge&amp;utm_content=badge"><img src="https://img.shields.io/gitter/room/MARC-FS/MARC-FS.svg" alt="Gitter"></a><br>"#,

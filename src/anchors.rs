@@ -1,5 +1,7 @@
 use super::StructuredPrinter;
 use super::TagHandler;
+use percent_encoding::percent_decode_str;
+use std::borrow::Cow;
 
 use markup5ever_rcdom::{Handle, NodeData};
 
@@ -29,6 +31,15 @@ impl TagHandler for AnchorHandler {
     }
 
     fn after_handle(&mut self, printer: &mut StructuredPrinter) {
+        // Percent decode url.
+        let url = percent_decode_str(&self.url).decode_utf8_lossy();
+        // [CommonMark Spec](https://spec.commonmark.org/0.31.2/#link-destination)
+        let url = if url.contains(|c: char| c.is_ascii_control() || c == ' ') {
+            Cow::Owned(format!("<{}>", url))
+        } else {
+            url
+        };
+
         match printer.data.get(self.start_pos..) {
             Some(d) => {
                 let starts_new_line = d.starts_with("\n");
@@ -45,18 +56,18 @@ impl TagHandler for AnchorHandler {
                     // handle end
                     if ends_new_line {
                         let next_position = printer.data.len();
-                        printer.insert_str(next_position - 1, &format!("]({})", self.url));
+                        printer.insert_str(next_position - 1, &format!("]({})", url));
                     } else {
-                        printer.append_str(&format!("]({})", self.url));
+                        printer.append_str(&format!("]({})", url));
                     }
                 } else {
                     printer.insert_str(self.start_pos, "[");
-                    printer.append_str(&format!("]({})", self.url));
+                    printer.append_str(&format!("]({})", url));
                 }
             }
             _ => {
                 printer.insert_str(self.start_pos, "[");
-                printer.append_str(&format!("]({})", self.url));
+                printer.append_str(&format!("]({})", url));
             }
         }
     }
