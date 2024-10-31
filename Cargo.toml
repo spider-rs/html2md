@@ -1,6 +1,6 @@
 [package]
 name = "fast_html2md"
-version = "0.0.19"
+version = "0.0.20"
 edition = "2021"
 description = "A fast html2md crate for rust"
 categories = ["development-tools", "parsing", "parser-implementations"]
@@ -19,6 +19,7 @@ html5ever = "0.27"
 lazy_static = "1"
 percent-encoding = "2"
 auto_encoder = "0"
+url = "2"
 
 [dev-dependencies]
 spectral = "0.6.0"

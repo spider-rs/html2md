@@ -228,6 +228,6 @@ where
 /// and concatenates their text, recursively.
 fn to_text(tag: &Handle, commonmark: bool) -> String {
     let mut printer = StructuredPrinter::default();
-    walk(tag, &mut printer, &HashMap::default(), commonmark);
+    walk(tag, &mut printer, &HashMap::default(), commonmark, &None);
     clean_markdown(&printer.data)
 }

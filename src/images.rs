@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use super::common::get_tag_attr;
 use super::StructuredPrinter;
 use super::TagHandler;
 use markup5ever_rcdom::Handle;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
+use url::Url;
 
 const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
 
@@ -12,12 +15,19 @@ const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').ad
 pub struct ImgHandler {
     block_mode: bool,
     commonmark: bool,
+    /// Used to make absolute urls.
+    url: Option<Arc<Url>>,
 }
 
 impl ImgHandler {
-    pub fn new(commonmark: bool) -> Self {
+    pub fn new(commonmark: bool, url: &Option<std::sync::Arc<Url>>) -> Self {
         Self {
             commonmark,
+            url: if let Some(u) = url {
+                Some(u.clone())
+            } else {
+                None
+            },
             ..Default::default()
         }
     }
@@ -26,7 +36,7 @@ impl ImgHandler {
 impl TagHandler for ImgHandler {
     fn handle(&mut self, tag: &Handle, printer: &mut StructuredPrinter) {
         // hack: detect if the image has associated style and has display in block mode
-        let style_tag = get_tag_attr(tag, "src");
+        let style_tag = get_tag_attr(tag, "style");
 
         if let Some(style) = style_tag {
             if style.contains("display: block") {
@@ -41,6 +51,7 @@ impl TagHandler for ImgHandler {
 
         // try to extract attrs
         let src = get_tag_attr(tag, "src");
+
         let alt = get_tag_attr(tag, "alt");
         let title = get_tag_attr(tag, "title");
         let height = get_tag_attr(tag, "height");
@@ -73,8 +84,17 @@ impl TagHandler for ImgHandler {
             // need to escape URL if it contains spaces
             // don't have any geometry-controlling attrs, post markdown natively
             let mut img_url = src.unwrap_or_default();
+
             if img_url.contains(' ') {
                 img_url = utf8_percent_encode(&img_url, FRAGMENT).to_string();
+            }
+
+            if img_url.starts_with("/") {
+                if let Some(ref u) = self.url {
+                    if let Ok(n) = u.join(&img_url) {
+                        img_url = n.to_string();
+                    }
+                }
             }
 
             printer.append_str(&format!(

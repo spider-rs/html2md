@@ -6,6 +6,8 @@ pub use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
 use std::boxed::Box;
 use std::collections::HashMap;
+use std::sync::Arc;
+use url::Url;
 pub mod anchors;
 pub mod codes;
 pub mod common;
@@ -13,6 +15,7 @@ pub mod containers;
 pub mod dummy;
 pub mod headers;
 pub mod iframes;
+pub mod ignore;
 pub mod images;
 pub mod lists;
 pub mod paragraphs;
@@ -66,10 +69,11 @@ lazy_static! {
 /// `html` is source HTML as `String`
 /// `custom` is custom tag hadler producers for tags you want, can be empty
 /// `commonmark` is for adjusting markdown output to commonmark
-pub fn parse_html_custom(
+pub fn parse_html_custom_base(
     html: &str,
     custom: &HashMap<String, Box<dyn TagHandlerFactory>>,
     commonmark: bool,
+    url: &Option<Url>,
 ) -> String {
     match parse_document(RcDom::default(), ParseOpts::default())
         .from_utf8()
@@ -77,12 +81,58 @@ pub fn parse_html_custom(
     {
         Ok(dom) => {
             let mut result = StructuredPrinter::default();
-            walk(&dom.document, &mut result, custom, commonmark);
+
+            walk(
+                &dom.document,
+                &mut result,
+                custom,
+                commonmark,
+                &if let Some(u) = url {
+                    Some(Arc::new(u.clone()))
+                } else {
+                    None
+                },
+            );
+
             // we want to eventually remove the clean step.
             clean_markdown(&result.data)
         }
         _ => Default::default(),
     }
+}
+
+/// Custom variant of main function. Allows to pass custom tag<->tag factory pairs
+/// in order to register custom tag hadler for tags you want.
+///
+/// You can also override standard tag handlers this way
+/// # Arguments
+/// `html` is source HTML as `String`
+/// `custom` is custom tag hadler producers for tags you want, can be empty
+/// `commonmark` is for adjusting markdown output to commonmark
+pub fn parse_html_custom(
+    html: &str,
+    custom: &HashMap<String, Box<dyn TagHandlerFactory>>,
+    commonmark: bool,
+) -> String {
+    parse_html_custom_base(html, custom, commonmark, &None)
+}
+
+/// Custom variant of main function. Allows to pass custom tag<->tag factory pairs
+/// in order to register custom tag hadler for tags you want.
+///
+/// You can also override standard tag handlers this way
+/// # Arguments
+/// `html` is source HTML as `String`
+/// `custom` is custom tag hadler producers for tags you want, can be empty
+/// `commonmark` is for adjusting markdown output to commonmark
+/// `url` is used to provide absolute url handling
+pub fn parse_html_custom_with_url(
+    html: &str,
+    custom: &HashMap<String, Box<dyn TagHandlerFactory>>,
+    commonmark: bool,
+    url: &Option<Url>,
+) -> String {
+    parse_html_custom_base(html, custom, commonmark, &url)
 }
 
 /// Main function of this library. Parses incoming HTML, converts it into Markdown
@@ -123,6 +173,7 @@ fn walk(
     result: &mut StructuredPrinter,
     custom: &HashMap<String, Box<dyn TagHandlerFactory>>,
     commonmark: bool,
+    url: &Option<Arc<Url>>,
 ) {
     let mut handler: Box<dyn TagHandler> = Box::new(DummyHandler);
     let mut tag_name = String::default();
@@ -211,7 +262,7 @@ fn walk(
                             }
                             "pre" | "code" => Box::new(CodeHandler::default()),
                             // images, links
-                            "img" => Box::new(ImgHandler::new(commonmark)),
+                            "img" => Box::new(ImgHandler::new(commonmark, url)),
                             "a" => Box::new(AnchorHandler::default()),
                             // lists
                             "ol" | "ul" | "menu" => Box::new(ListHandler),
@@ -246,7 +297,7 @@ fn walk(
             continue;
         }
 
-        walk(child, result, custom, commonmark);
+        walk(child, result, custom, commonmark, url);
 
         if let NodeData::Element { ref name, .. } = child.data {
             if let Some(el) = result.siblings.get_mut(&current_depth) {
