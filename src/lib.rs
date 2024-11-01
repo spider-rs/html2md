@@ -263,7 +263,7 @@ fn walk(
                             "pre" | "code" => Box::new(CodeHandler::default()),
                             // images, links
                             "img" => Box::new(ImgHandler::new(commonmark, url)),
-                            "a" => Box::new(AnchorHandler::default()),
+                            "a" => Box::new(AnchorHandler::new(url)),
                             // lists
                             "ol" | "ul" | "menu" => Box::new(ListHandler),
                             "li" => Box::new(ListItemHandler::default()),

@@ -1,20 +1,36 @@
 use super::StructuredPrinter;
 use super::TagHandler;
+use markup5ever_rcdom::{Handle, NodeData};
 use percent_encoding::percent_decode_str;
 use std::borrow::Cow;
-
-use markup5ever_rcdom::{Handle, NodeData};
+use std::sync::Arc;
+use url::Url;
 
 #[derive(Default)]
 pub struct AnchorHandler {
     start_pos: usize,
-    url: String,
+    href: String,
+    /// Used to make absolute urls.
+    url: Option<Arc<Url>>,
+}
+
+impl AnchorHandler {
+    pub fn new(url: &Option<std::sync::Arc<Url>>) -> Self {
+        Self {
+            url: if let Some(u) = url {
+                Some(u.clone())
+            } else {
+                None
+            },
+            ..Default::default()
+        }
+    }
 }
 
 impl TagHandler for AnchorHandler {
     fn handle(&mut self, tag: &Handle, printer: &mut StructuredPrinter) {
         self.start_pos = printer.data.len();
-        self.url = match tag.data {
+        self.href = match tag.data {
             NodeData::Element { ref attrs, .. } => {
                 let attrs = attrs.borrow();
                 let href = attrs
@@ -32,7 +48,19 @@ impl TagHandler for AnchorHandler {
 
     fn after_handle(&mut self, printer: &mut StructuredPrinter) {
         // Percent decode url.
-        let url = percent_decode_str(&self.url).decode_utf8_lossy();
+        let url = percent_decode_str(&self.href).decode_utf8_lossy();
+
+        let url = if url.starts_with('/') {
+            match &self.url {
+                Some(base_url) => base_url
+                    .join(&url)
+                    .map_or(url, |joined_url| joined_url.to_string().into()),
+                None => url,
+            }
+        } else {
+            url
+        };
+
         // [CommonMark Spec](https://spec.commonmark.org/0.31.2/#link-destination)
         let url = if url.contains(|c: char| c.is_ascii_control() || c == ' ') {
             Cow::Owned(format!("<{}>", url))
