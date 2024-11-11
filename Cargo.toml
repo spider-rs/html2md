@@ -1,6 +1,6 @@
 [package]
 name = "fast_html2md"
-version = "0.0.22"
+version = "0.0.24"
 edition = "2021"
 description = "A fast html2md crate for rust"
 categories = ["development-tools", "parsing", "parser-implementations"]

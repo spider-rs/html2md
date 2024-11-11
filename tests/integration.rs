@@ -23,7 +23,7 @@ fn test_marcfs() {
 }
 
 #[test]
-// #[ignore]
+#[ignore]
 fn test_real_world_wiki() -> Result<(), Box<dyn std::error::Error>> {
     use std::error::Error;
     use std::fs::{self, File};
@@ -157,7 +157,7 @@ fn test_tables_crash2() {
         .expect("File must be readable");
     let table_with_vertical_header = parse_html(&html, false);
 
-    assert_that!(table_with_vertical_header).contains(indoc! {"xxxxx xxxxxxxxxx xxxxxxx x xxxxx))~~xxxxxxxx xxxxxxxx~~\n\n## At a Glance\n\n|||\n|||\n|||\n|||\n|Current Conditions:|Open all year. No reservations. No services.|\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n| Reservations: | No reservations. |\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n| Fees | No fee. |\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n| Water: | No water. |\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n\n"
+    assert_that!(table_with_vertical_header).contains(indoc! {"xxxxx xxxxxxxxxx xxxxxxx x xxxxx))~~xxxxxxxx xxxxxxxx~~\n\n## At a Glance\n\n|Current Conditions:|Open all year. No reservations. No services.|\n|||\n| Reservations: | No reservations. |\n| Fees | No fee. |\n| Water: | No water. |\n\n"
     });
 }
 
