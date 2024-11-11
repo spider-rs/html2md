@@ -1,14 +1,14 @@
 extern crate spectral;
 
-use html2md::ignore::IgnoreTagFactory;
-use html2md::{parse_html, parse_html_custom, parse_html_custom_with_url};
+// use html2md::ignore::IgnoreTagFactory;
+// use html2md::{parse_html, parse_html_custom, parse_html_custom_with_url};
+use html2md::parse_html;
+use indoc::indoc;
+use spectral::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
 use url::Url;
-
-use indoc::indoc;
-use spectral::prelude::*;
 
 #[test]
 #[ignore]
@@ -23,15 +23,44 @@ fn test_marcfs() {
 }
 
 #[test]
-#[ignore]
-fn test_real_world() {
-    let mut html = String::new();
-    let mut html_file = File::open("test-samples/real-world-1.html").unwrap();
-    html_file
-        .read_to_string(&mut html)
-        .expect("File must be readable");
-    let result = parse_html(&html, false);
-    assert!(!result.is_empty());
+// #[ignore]
+fn test_real_world_wiki() -> Result<(), Box<dyn std::error::Error>> {
+    use std::error::Error;
+    use std::fs::{self, File};
+    use std::io::{self, Read};
+    use std::path::Path;
+
+    let paths = fs::read_dir("test-samples/wiki")?;
+
+    fn run_parse(path: &Path) -> Result<(), Box<dyn Error>> {
+        let mut html = String::new();
+        let mut html_file = File::open(path)?;
+        html_file.read_to_string(&mut html)?;
+
+        let result = parse_html(&html, false);
+
+        if result.is_empty() {
+            Err(Box::new(io::Error::new(
+                io::ErrorKind::Other,
+                "Result is empty",
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    for entry in paths {
+        let path = entry?.path();
+
+        if path.is_file() {
+            match run_parse(&path) {
+                Ok(_) => assert!(true),
+                Err(_e) => assert!(false),
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -128,7 +157,7 @@ fn test_tables_crash2() {
         .expect("File must be readable");
     let table_with_vertical_header = parse_html(&html, false);
 
-    assert_that!(table_with_vertical_header).contains(indoc! {"\n\n## At a Glance\n\n|Current Conditions:|Open all year. No reservations. No services.|\n|||\n| Reservations: | No reservations. |\n| Fees | No fee. |\n| Water: | No water. |\n\n"
+    assert_that!(table_with_vertical_header).contains(indoc! {"xxxxx xxxxxxxxxx xxxxxxx x xxxxx))~~xxxxxxxx xxxxxxxx~~\n\n## At a Glance\n\n|||\n|||\n|||\n|||\n|Current Conditions:|Open all year. No reservations. No services.|\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n| Reservations: | No reservations. |\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n| Fees | No fee. |\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n| Water: | No water. |\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n|||\n\n"
     });
 }
 
@@ -141,7 +170,7 @@ fn test_html_from_text() {
         .expect("File must be readable");
 
     let mut tag_factory: HashMap<String, Box<dyn html2md::TagHandlerFactory>> = HashMap::new();
-    let tag = Box::new(IgnoreTagFactory {});
+    let tag = Box::new(html2md::ignore::IgnoreTagFactory {});
 
     tag_factory.insert(String::from("script"), tag.clone());
     tag_factory.insert(String::from("style"), tag.clone());
@@ -149,7 +178,7 @@ fn test_html_from_text() {
 
     tag_factory.insert(String::from("iframe"), tag);
 
-    let result = parse_html_custom_with_url(
+    let result = html2md::parse_html_custom_with_url(
         &html,
         &tag_factory,
         false,

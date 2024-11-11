@@ -30,6 +30,7 @@ use dummy::DummyHandler;
 use dummy::HtmlCherryPickHandler;
 use dummy::IdentityHandler;
 use headers::HeaderHandler;
+use html5ever::LocalName;
 use iframes::IframeHandler;
 use images::ImgHandler;
 use lists::ListHandler;
@@ -75,12 +76,11 @@ pub fn parse_html_custom_base(
     commonmark: bool,
     url: &Option<Url>,
 ) -> String {
-    match parse_document(RcDom::default(), ParseOpts::default())
-        .from_utf8()
-        .read_from(&mut html.as_bytes())
-    {
+    let document_parser = parse_document(RcDom::default(), ParseOpts::default());
+
+    match document_parser.from_utf8().read_from(&mut html.as_bytes()) {
         Ok(dom) => {
-            let mut result = StructuredPrinter::default();
+            let mut result = Box::new(StructuredPrinter::default());
 
             walk(
                 &dom.document,
@@ -92,6 +92,7 @@ pub fn parse_html_custom_base(
                 } else {
                     None
                 },
+                false,
             );
 
             // we want to eventually remove the clean step.
@@ -174,6 +175,7 @@ fn walk(
     custom: &HashMap<String, Box<dyn TagHandlerFactory>>,
     commonmark: bool,
     url: &Option<Arc<Url>>,
+    ignore_parents: bool,
 ) {
     let mut handler: Box<dyn TagHandler> = Box::new(DummyHandler);
     let mut tag_name = String::default();
@@ -187,7 +189,7 @@ fn walk(
         NodeData::Element { .. } | NodeData::Text { .. }
     );
 
-    if find_parent_tags {
+    if find_parent_tags && !ignore_parents {
         for tag in result.parent_chain.iter() {
             if tag == "code" {
                 inside_code = true;
@@ -205,7 +207,10 @@ fn walk(
     }
 
     match input.data {
-        NodeData::Document | NodeData::Doctype { .. } | NodeData::ProcessingInstruction { .. } => {}
+        NodeData::Document
+        | NodeData::Comment { .. }
+        | NodeData::Doctype { .. }
+        | NodeData::ProcessingInstruction { .. } => (),
         NodeData::Text { ref contents } => {
             let mut text = contents.borrow().to_string();
 
@@ -221,10 +226,10 @@ fn walk(
                 }
 
                 let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
+
                 result.append_str(minified_text.trim());
             }
         }
-        NodeData::Comment { .. } => {} // ignore comments
         NodeData::Element { ref name, .. } => {
             tag_name = name.local.to_string();
 
@@ -271,7 +276,7 @@ fn walk(
                             "sub" | "sup" => Box::new(IdentityHandler::new(commonmark)),
                             // tables, handled fully internally as markdown can't have nested content in tables
                             // supports only single tables as of now
-                            "table" => Box::new(TableHandler::default()),
+                            "table" => Box::new(TableHandler::new(commonmark, url.clone())),
                             "iframe" => Box::new(IframeHandler),
                             _ => Box::new(DummyHandler),
                         }
@@ -287,28 +292,30 @@ fn walk(
 
     // save this tag name as parent for child nodes
     result.parent_chain.push(tag_name.clone()); // e.g. it was ["body"] and now it's ["body", "p"]
+
     let current_depth = result.parent_chain.len(); // e.g. it was 1 and now it's 2
 
     // create space for siblings of next level
     result.siblings.insert(current_depth, vec![]);
 
-    for child in input.children.borrow().iter() {
-        if handler.skip_descendants() {
-            continue;
-        }
+    if !handler.skip_descendants() {
+        let children = input.children.borrow();
 
-        walk(child, result, custom, commonmark, url);
+        for child in children.iter() {
+            walk(child, result, custom, commonmark, url, false);
 
-        if let NodeData::Element { ref name, .. } = child.data {
-            if let Some(el) = result.siblings.get_mut(&current_depth) {
-                let eln = name.local.to_string();
-                let ignore_push = eln == "script" || eln == "style";
+            if let NodeData::Element { ref name, .. } = child.data {
+                if let Some(el) = result.siblings.get_mut(&current_depth) {
+                    let eln = name.local.to_string();
 
-                if !ignore_push {
-                    el.push(eln)
+                    let ignore_push = eln == "script" || eln == "style";
+
+                    if !ignore_push {
+                        el.push(eln)
+                    }
                 }
-            }
-        };
+            };
+        }
     }
 
     // clear siblings of next level
