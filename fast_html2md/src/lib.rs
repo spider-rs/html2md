@@ -8,21 +8,26 @@ use std::boxed::Box;
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::Url;
-pub mod anchors;
-pub mod codes;
-pub mod common;
-pub mod containers;
-pub mod dummy;
-pub mod headers;
-pub mod iframes;
-pub mod ignore;
-pub mod images;
-pub mod lists;
-pub mod paragraphs;
-pub mod quotes;
-pub mod styles;
-pub mod tables;
-pub mod utils;
+
+// we want to just use the rewriter instead for v0.1.
+pub mod rewriter;
+pub mod scraper;
+pub use scraper::ignore;
+
+pub(crate) use scraper::anchors;
+pub(crate) use scraper::codes;
+// pub(crate) use scraper::common;
+pub(crate) use scraper::containers;
+pub(crate) use scraper::dummy;
+pub(crate) use scraper::headers;
+pub(crate) use scraper::iframes;
+pub(crate) use scraper::images;
+pub(crate) use scraper::lists;
+pub(crate) use scraper::paragraphs;
+pub(crate) use scraper::quotes;
+pub(crate) use scraper::styles;
+pub(crate) use scraper::tables;
+pub(crate) use scraper::utils;
 
 use anchors::AnchorHandler;
 use codes::CodeHandler;
@@ -52,14 +57,12 @@ lazy_static! {
     static ref MARKDOWN_MIDDLE_KEYCHARS: Regex = Regex::new(r"[<>*\\_~]").expect("valid regex pattern");               // for Markdown escaping
     static ref CLEANUP_PATTERN: Regex = Regex::new(
         r"(?x)
-        (?P<empty_line>^\s*$\n)|
-        (?P<excessive_newlines>\n{3,})|
-        (?P<trailing_space>(\S) )|
-        (?P<leading_newlines>^\n+)|
-        (?P<last_whitespace>\s+$)|
-        (?P<empty_image>!\[\]\(\))|
-        (?P<leading_whitespace>^\s+)"
-    ).expect("valid regex pattern");
+        (?m)
+        (^\s*$\n|\n{3,})|         # Empty lines or excessive newlines
+        (\s+$|^\n+|\s{2,})|      # Trailing, leading, or excessive spaces
+        (!\[\]\(\))              # Empty image syntax
+        "
+    ).expect("Valid regex pattern");
 }
 
 /// Custom variant of main function. Allows to pass custom tag<->tag factory pairs
@@ -143,6 +146,14 @@ pub fn parse_html_custom_with_url(
 /// `commonmark` to change the markdown flavor to commonmark as `boolean`
 pub fn parse_html(html: &str, commonmark: bool) -> String {
     parse_html_custom(html, &HashMap::default(), commonmark)
+}
+
+/// Main function of this library to come. Rewrites incoming HTML, converts it into Markdown
+/// and returns converted string. Incomplete work in progress for major performance increases.
+/// # Arguments
+/// `html` is source HTML as `String`
+pub fn rewrite_html(html: &str) -> String {
+    rewriter::writer::convert_html_to_markdown(html).unwrap_or_default()
 }
 
 /// Same as `parse_html` but retains all "span" html elements intact
@@ -381,21 +392,17 @@ fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
 fn clean_markdown(text: &str) -> String {
     CLEANUP_PATTERN
         .replace_all(text, |caps: &regex::Captures| {
-            if caps.name("empty_line").is_some()
-                || caps.name("leading_newlines").is_some()
-                || caps.name("last_whitespace").is_some()
-                || caps.name("empty_image").is_some()
-                || caps.name("leading_whitespace").is_some()
-            {
-                "".to_string()
-            } else if caps.name("excessive_newlines").is_some() {
-                "\n\n".to_string()
-            } else if let Some(trailing_match) = caps.name("trailing_space") {
-                trailing_match.as_str().trim_end().to_string()
+            if caps.get(1).is_some() || caps.get(4).is_some() {
+                "\n\n".to_string() // Consolidate newlines
+            } else if caps.get(3).is_some() {
+                "".to_string() // Remove spaces or empty image syntax
+            } else if caps.get(2).is_some() {
+                " ".to_string() // Remove spaces or empty image syntax
             } else {
-                caps[0].to_string()
+                caps[0].trim().to_string()
             }
         })
+        .trim()
         .to_string()
 }
 

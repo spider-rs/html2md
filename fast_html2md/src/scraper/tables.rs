@@ -1,7 +1,6 @@
 use super::StructuredPrinter;
 use super::TagHandler;
 use super::{clean_markdown, walk};
-use std::borrow::BorrowMut;
 use std::sync::Arc;
 use std::{cmp, collections::HashMap};
 
