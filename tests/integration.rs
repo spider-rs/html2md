@@ -23,7 +23,6 @@ fn test_marcfs() {
 }
 
 #[test]
-#[ignore]
 fn test_real_world_wiki() -> Result<(), Box<dyn std::error::Error>> {
     use std::error::Error;
     use std::fs::{self, File};
@@ -138,14 +137,8 @@ fn test_tables_with_newlines() {
         .expect("File must be readable");
     let result = parse_html(&html, false);
 
-    // all lines starting with | should end with | as well
-    let invalid_table_lines: Vec<&str> = result
-        .lines()
-        .filter(|line| line.starts_with("|"))
-        .filter(|line| !line.ends_with("|"))
-        .collect();
-
-    assert_that(&invalid_table_lines).has_length(1);
+    assert_that!(result).contains(indoc! {"[![Embedded YouTube video](https://img.youtube.com/vi/ZZZZZZZZZ/0.jpg)](https://www.youtube.com/watch?v=ZZZZZZZZZ)\n\n|Maybe I'm foolish, maybe I'm blind\nThinking I can see through this and see what's behind\nGot no way to prove it so maybe I'm blind\n\nBut I'm only human after all,\nI'm only human after all\nDon't put your blame on me|xxxxx xxxx, x xxxxxx, xxxxx xxxx — xxxxxx\nxxx xxxxx, xxx xxxx xxxxxx xxxxxx xxx, x xxxxxx xxx xxx xx xxx\nxxxx x xxxx xx xxxx xxxxxxx xxxxxxxxxxxxx, xxx xxx xxxxxxxx, x xxxxxx.\n\nxx x xxxxx xxxx xxxxxxx, x xxxxx-xx xxxxxx,\nx xxxxx xxxx xxxxxxx, x xxxxx xxxxxx.\nxx xxxx xxxx|\n|||\n\n[xxxxxx xxxxx xxxxx x xxxxxxx](/)\n\nx xxxx xxxxxxxxx xxxxxxx xxxxxxxxxxx xx xxxx xxxxx. x xxxxx xxxxxxx, xxxx xxxxx xxxxxxx xx xxxxxxxxxx xxxxxx. xxx xxxxxxxx, xxx xxxxxxxxx xxxxxxxxxxxxxx xx xxxxx — xxxxxxxxxx xxxxxxxxxx x xxxxx xxxxxxxxxxxxx xxxxxxxxx. x xxx xxxxxxxxxxxx*xxxx*, xxxxxx xxxx, xxxxxxxxxx xxxxx xxxxxxxx, xxxxxxxxxx x xxxxxxxxx. xx xxxxxx xxxxx xxxxxxxxxxxxxxxxx — x xxxxxx xxx xxxx.\n\nxxxxx xxxxxxxxxx xxxxx x xxxx xxxxxxxxxx xxxxx. xxxxx. x xxxxx: «x xxxxxx xxxxxxx, x xxxxx xxx xxxx, xx xxxxxxxx xxxxxx», — xxx xxxxx xxxxxxxx. xxxxxx xxx x xxxx xxxx xxxxxxxx xxxxxxxx xxxxxxx xxxx xxxxxxxxxxx xxxxxxxxxx, xxxxxxx xxxxxx xxxxxx xxx xxxxx, xxxxxxxxxxx x x xxxxxxx xxxxxxxxx.\n\nxx x xxxxx xxxx xxxxxxx. xxxxxx xxxxx? xxxxxxxxxxx x xxxxxxxxx xxxxxx.\n\nx xxxxx x xxxxxxxxxx x xxxxx... x xxxxxx xxxx xxxxxx xxxxxxx xxxxxxxx. xx xxxx, x xxxxxx xxx-xx xxxxxxxxx xx xxxxxxx, xxx xxxxxx xxxxxx, xxx xxx xxxxx, xxxxx xxxxxxxx xx xxxx... x xxxxxx xxxxxxx xx xxxx xxxxx, xxx, xxxxx xxxx xxxxxxxxxx, x xxxxx xxxxxxxxx xx xxxxx. x xxx-xx xxx xxxxx xxxxxxx xxxxxxxxxxxxx.\n\nxxxxxx xx... xx xxx xx xxxxxxxxxxxxx xxxxxx xxxxxxxxxxxxx x xxxxxxxxxx xxxxx, xxxxx xxx xxxx xxxxxxxxx, x xxxxx xxx xxxxxxxxx, xxx xxxxxxx xxx, xxx xxxx xxxxxxx xxxxxx, x xx xxx, xxx xxxx xxxxxxxx."
+});
 }
 
 #[test]

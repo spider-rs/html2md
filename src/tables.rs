@@ -1,6 +1,7 @@
 use super::StructuredPrinter;
 use super::TagHandler;
 use super::{clean_markdown, walk};
+use std::borrow::BorrowMut;
 use std::sync::Arc;
 use std::{cmp, collections::HashMap};
 
@@ -155,6 +156,9 @@ impl TagHandler for TableHandler {
                 }
             }
 
+            // remove the children to prevent infinite loops
+            tag.children.take();
+
             printer.insert_newline();
             printer.insert_newline();
             printer.append_str(&table_markup);
@@ -225,8 +229,9 @@ fn tag_name(tag: &Handle) -> String {
 /// Find descendants of this tag with tag name `name`
 /// This includes both direct children and descendants
 fn find_children(tag: &Handle, name: &str) -> Vec<Handle> {
-    let mut result: Vec<Handle> = vec![];
     let children = tag.children.borrow();
+    let mut result: Vec<Handle> = vec![];
+
     for child in children.iter() {
         if tag_name(child) == name {
             result.push(child.clone());
@@ -245,8 +250,8 @@ fn collect_children<P>(tag: &Handle, predicate: P) -> Vec<Handle>
 where
     P: Fn(&Handle) -> bool,
 {
-    let mut result: Vec<Handle> = vec![];
     let children = tag.children.borrow();
+    let mut result: Vec<Handle> = Vec::with_capacity(children.len());
 
     for child in children.iter() {
         if predicate(child) {
@@ -261,13 +266,15 @@ where
 /// and concatenates their text, recursively.
 fn to_text(tag: &Handle, commonmark: bool, url: &Option<Arc<Url>>) -> String {
     let mut printer = StructuredPrinter::default();
+
     walk(
-        tag,
+        &tag,
         &mut printer,
         &HashMap::default(),
         commonmark,
-        url,
+        &url,
         true,
     );
+
     clean_markdown(&printer.data)
 }

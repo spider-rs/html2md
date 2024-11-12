@@ -22,6 +22,7 @@ pub mod paragraphs;
 pub mod quotes;
 pub mod styles;
 pub mod tables;
+pub mod utils;
 
 use anchors::AnchorHandler;
 use codes::CodeHandler;
@@ -30,7 +31,6 @@ use dummy::DummyHandler;
 use dummy::HtmlCherryPickHandler;
 use dummy::IdentityHandler;
 use headers::HeaderHandler;
-use html5ever::LocalName;
 use iframes::IframeHandler;
 use images::ImgHandler;
 use lists::ListHandler;
@@ -183,14 +183,19 @@ fn walk(
     let mut inside_pre = false;
     let mut inside_code = false;
     let mut ignore_write = false;
+    let mut inside_table = false;
 
     let find_parent_tags = matches!(
         &input.data,
         NodeData::Element { .. } | NodeData::Text { .. }
     );
 
-    if find_parent_tags && !ignore_parents {
+    if find_parent_tags || ignore_parents {
         for tag in result.parent_chain.iter() {
+            if ignore_parents && tag == "table" {
+                inside_table = true;
+                break;
+            }
             if tag == "code" {
                 inside_code = true;
                 break;
@@ -228,69 +233,39 @@ fn walk(
                 let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
 
                 result.append_str(minified_text.trim());
+            } else {
+                result.append_str(text.trim());
             }
         }
         NodeData::Element { ref name, .. } => {
-            tag_name = name.local.to_string();
+            if !utils::inline_elements::SKIP_ELEMENTS.contains(&name.local) {
+                tag_name = name.local.to_string();
 
-            // do not parse scripts or style tags
-            if tag_name == "script" || tag_name == "style" {
-                return;
-            }
+                // do not parse scripts or style tags
+                if tag_name == "script" || tag_name == "style" {
+                    return;
+                }
 
-            if inside_pre {
-                // don't add any html tags inside the pre section
-                handler = Box::new(DummyHandler);
-            } else {
-                match custom.get(&tag_name) {
-                    Some(factory) => {
-                        // have user-supplied factory, instantiate a handler for this tag
-                        handler = factory.instantiate();
-                    }
-                    _ => {
-                        handler = match tag_name.as_ref() {
-                            // containers
-                            "div" | "section" | "header" | "footer" => Box::new(ContainerHandler),
-                            // pagination, breaks
-                            "p" | "br" | "hr" => Box::new(ParagraphHandler::default()),
-                            "q" | "cite" | "blockquote" => Box::new(QuoteHandler::default()),
-                            // spoiler tag
-                            "details" | "summary" => {
-                                Box::new(HtmlCherryPickHandler::new(commonmark))
-                            }
-                            // formatting
-                            "b" | "i" | "s" | "strong" | "em" | "del" => {
-                                Box::new(StyleHandler::default())
-                            }
-                            "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-                                Box::new(HeaderHandler::default())
-                            }
-                            "pre" | "code" => Box::new(CodeHandler::default()),
-                            // images, links
-                            "img" => Box::new(ImgHandler::new(commonmark, url)),
-                            "a" => Box::new(AnchorHandler::new(url)),
-                            // lists
-                            "ol" | "ul" | "menu" => Box::new(ListHandler),
-                            "li" => Box::new(ListItemHandler::default()),
-                            // as-is
-                            "sub" | "sup" => Box::new(IdentityHandler::new(commonmark)),
-                            // tables, handled fully internally as markdown can't have nested content in tables
-                            // supports only single tables as of now
-                            "table" => Box::new(TableHandler::new(commonmark, url.clone())),
-                            "iframe" => Box::new(IframeHandler),
-                            _ => Box::new(DummyHandler),
-                        }
-                    }
+                if ignore_parents && tag_name == "table" {
+                    inside_table = true;
+                }
+
+                handler = if inside_pre {
+                    // don't add any html tags inside the pre section
+                    Box::new(DummyHandler)
+                } else {
+                    get_handler(custom, &tag_name, commonmark, url)
                 }
             }
         }
     }
 
-    // handle this tag, while it's not in parent chain
-    // and doesn't have child siblings
-    handler.handle(input, result);
+    if !inside_table || ignore_parents && inside_table {
+        // handle this tag, while it's not in parent chain
+        // and doesn't have child siblings
+        handler.handle(input, result);
+    }
 
-    // save this tag name as parent for child nodes
     result.parent_chain.push(tag_name.clone()); // e.g. it was ["body"] and now it's ["body", "p"]
 
     let current_depth = result.parent_chain.len(); // e.g. it was 1 and now it's 2
@@ -299,29 +274,20 @@ fn walk(
     result.siblings.insert(current_depth, vec![]);
 
     if !handler.skip_descendants() {
-        let children = input.children.borrow();
+        for child in input.children.borrow().iter() {
+            if valid_block_element(&child.data) {
+                walk(&child, result, custom, commonmark, url, ignore_parents);
 
-        for child in children.iter() {
-            walk(child, result, custom, commonmark, url, false);
-
-            if let NodeData::Element { ref name, .. } = child.data {
-                if let Some(el) = result.siblings.get_mut(&current_depth) {
-                    let eln = name.local.to_string();
-
-                    let ignore_push = eln == "script" || eln == "style";
-
-                    if !ignore_push {
-                        el.push(eln)
+                if let NodeData::Element { ref name, .. } = child.data {
+                    if let Some(el) = result.siblings.get_mut(&current_depth) {
+                        el.push(name.local.to_string());
                     }
                 }
-            };
+            }
         }
     }
 
-    // clear siblings of next level
     result.siblings.remove(&current_depth);
-
-    // release parent tag
     result.parent_chain.pop();
 
     // finish handling of tag - parent chain now doesn't contain this tag itself again
@@ -332,12 +298,12 @@ fn walk(
 ///
 /// Escapes text inside HTML tags so it won't be recognized as Markdown control sequence
 /// like list start or bold text style
-fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
+fn escape_markdown_base(result: &str, text: &str) -> String {
     // always escape bold/italic/strikethrough
     let data: std::borrow::Cow<str> = MARKDOWN_MIDDLE_KEYCHARS.replace_all(text, "\\$0");
 
     // if we're at the start of the line we need to escape list- and quote-starting sequences
-    let data = if START_OF_LINE_PATTERN.is_match(&result.data) {
+    let data = if START_OF_LINE_PATTERN.is_match(&result) {
         MARKDOWN_STARTONLY_KEYCHARS.replace(&data, "$1\\$2")
     } else {
         data
@@ -346,6 +312,67 @@ fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
     // no handling of more complicated cases such as
     // ![] or []() ones, for now this will suffice
     data.into()
+}
+
+/// Get the handler to use for the element.
+pub(crate) fn get_handler<T: std::borrow::Borrow<str> + std::hash::Hash + std::cmp::Eq>(
+    custom: &HashMap<String, Box<dyn TagHandlerFactory>>,
+    tag_name: &T,
+    commonmark: bool,
+    url: &Option<Arc<Url>>,
+) -> Box<dyn TagHandler> {
+    let name = tag_name.borrow();
+    match custom.get(name) {
+        Some(factory) => {
+            // have user-supplied factory, instantiate a handler for this tag
+            factory.instantiate()
+        }
+        _ => {
+            match name.as_ref() {
+                // containers
+                "div" | "section" | "header" | "footer" => Box::new(ContainerHandler),
+                // pagination, breaks
+                "p" | "br" | "hr" => Box::new(ParagraphHandler::default()),
+                "q" | "cite" | "blockquote" => Box::new(QuoteHandler::default()),
+                // spoiler tag
+                "details" | "summary" => Box::new(HtmlCherryPickHandler::new(commonmark)),
+                // formatting
+                "b" | "i" | "s" | "strong" | "em" | "del" => Box::new(StyleHandler::default()),
+                "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => Box::new(HeaderHandler::default()),
+                "pre" | "code" => Box::new(CodeHandler::default()),
+                // images, links
+                "img" => Box::new(ImgHandler::new(commonmark, url)),
+                "a" => Box::new(AnchorHandler::new(url)),
+                // lists
+                "ol" | "ul" | "menu" => Box::new(ListHandler),
+                "li" => Box::new(ListItemHandler::default()),
+                // as-is
+                "sub" | "sup" => Box::new(IdentityHandler::new(commonmark)),
+                // tables, handled fully internally as markdown can't have nested content in tables
+                // supports only single tables as of now
+                "table" => Box::new(TableHandler::new(commonmark, url.clone())),
+                "iframe" => Box::new(IframeHandler),
+                _ => Box::new(DummyHandler),
+            }
+        }
+    }
+}
+
+/// A valid HTML block element.
+pub(crate) fn valid_block_element(node: &NodeData) -> bool {
+    match node {
+        NodeData::Element { ref name, .. } => {
+            !utils::inline_elements::SKIP_ELEMENTS.contains(&name.local)
+        }
+        _ => true,
+    }
+}
+/// This conversion should only be applied to text tags
+///
+/// Escapes text inside HTML tags so it won't be recognized as Markdown control sequence
+/// like list start or bold text style
+fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
+    escape_markdown_base(&result.data, text)
 }
 
 /// Called after all processing has been finished

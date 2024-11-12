@@ -61,7 +61,13 @@ impl TagHandler for ListItemHandler {
         }
 
         let current_depth = printer.parent_chain.len();
-        let order = printer.siblings[&current_depth].len() + 1;
+
+        let order = if printer.siblings.len() >= current_depth {
+            printer.siblings[&current_depth].len() + 1
+        } else {
+            0
+        };
+
         match self.list_type.as_ref() {
             "ul" | "menu" => printer.append_str("* "), // unordered list: *, *, *
             "ol" => printer.append_str(&(order.to_string() + ". ")), // ordered list: 1, 2, 3
