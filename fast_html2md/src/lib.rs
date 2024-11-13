@@ -2,20 +2,24 @@ use html5ever::driver::ParseOpts;
 use html5ever::parse_document;
 use html5ever::tendril::TendrilSink;
 use lazy_static::lazy_static;
-pub use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use regex::Regex;
 use std::boxed::Box;
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::Url;
 
+pub use markup5ever_rcdom::{Handle, NodeData, RcDom};
+
 // we want to just use the rewriter instead for v0.1.
+pub mod extended;
 pub mod rewriter;
 pub mod scraper;
-pub use scraper::ignore;
+
+use extended::sifter::WhitespaceSifter;
 
 pub(crate) use scraper::anchors;
 pub(crate) use scraper::codes;
+pub use scraper::ignore;
 // pub(crate) use scraper::common;
 pub(crate) use scraper::containers;
 pub(crate) use scraper::dummy;
@@ -55,14 +59,6 @@ lazy_static! {
     static ref START_OF_LINE_PATTERN: Regex = Regex::new("(^|\\n) *$").expect("valid regex pattern");                  // for Markdown escaping
     static ref MARKDOWN_STARTONLY_KEYCHARS: Regex = Regex::new(r"^(\s*)([=>+\-#])").expect("valid regex pattern");     // for Markdown escaping
     static ref MARKDOWN_MIDDLE_KEYCHARS: Regex = Regex::new(r"[<>*\\_~]").expect("valid regex pattern");               // for Markdown escaping
-    static ref CLEANUP_PATTERN: Regex = Regex::new(
-        r"(?x)
-        (?m)
-        (^\s*$\n|\n{3,})|         # Empty lines or excessive newlines
-        (\s+$|^\n+|\s{2,})|      # Trailing, leading, or excessive spaces
-        (!\[\]\(\))              # Empty image syntax
-        "
-    ).expect("Valid regex pattern");
 }
 
 /// Custom variant of main function. Allows to pass custom tag<->tag factory pairs
@@ -389,21 +385,8 @@ fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
 /// Called after all processing has been finished
 ///
 /// Clears excessive punctuation that would be trimmed by renderer anyway
-fn clean_markdown(text: &str) -> String {
-    CLEANUP_PATTERN
-        .replace_all(text, |caps: &regex::Captures| {
-            if caps.get(1).is_some() || caps.get(4).is_some() {
-                "\n\n".to_string() // Consolidate newlines
-            } else if caps.get(3).is_some() {
-                "".to_string() // Remove spaces or empty image syntax
-            } else if caps.get(2).is_some() {
-                " ".to_string() // Remove spaces or empty image syntax
-            } else {
-                caps[0].trim().to_string()
-            }
-        })
-        .trim()
-        .to_string()
+fn clean_markdown(input: &str) -> String {
+    input.sift().into()
 }
 
 /// Intermediate result of HTML -> Markdown conversion.

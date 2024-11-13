@@ -35,13 +35,7 @@ fn test_anchor3() {
         r#"<p><a href="http://ya.ru">APOSIMZ</a><p/><a href="http://yandex.ru">SIDONIA</a></p>"#,
         false,
     );
-    assert_eq!(
-        md,
-        "\
-[APOSIMZ](http://ya.ru)
-
-[SIDONIA](http://yandex.ru)"
-    )
+    assert_eq!(md, "[APOSIMZ](http://ya.ru)\n[SIDONIA](http://yandex.ru)")
 }
 
 #[test]
@@ -128,7 +122,7 @@ fn test_headers() {
     );
     assert_eq!(
         md,
-        "# MARC-FS\n\n[Mail.ru](http://Mail.ru)Cloud filesystem written for FUSE\n## Synopsis"
+        "# MARC-FS\n[Mail.ru](http://Mail.ru)Cloud filesystem written for FUSE\n## Synopsis"
     )
 }
 

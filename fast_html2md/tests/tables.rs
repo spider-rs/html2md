@@ -194,5 +194,5 @@ fn test_tables_wild_example() {
         false,
     );
 
-    assert_eq!(md, "| One ring | Patterns | Titanic |  |  |  |\n|||||||\n| One ring to rule them all |There's one for the sorrow| Roll on, Titanic, roll |  |  |  |\n| One ring to find them | And two for the joy |You're the pride of White Star Line|  |  |  |\n| One ring to bring them all | And three for the girls | Roll on, Titanic, roll |  |  |  |\n|And in the darkness bind them| And four for the boys | Into the mists of time |  |  |  |");
+    assert_eq!(md, "| One ring | Patterns | Titanic | | | |\n|||||||\n| One ring to rule them all |There's one for the sorrow| Roll on, Titanic, roll | | | |\n| One ring to find them | And two for the joy |You're the pride of White Star Line| | | |\n| One ring to bring them all | And three for the girls | Roll on, Titanic, roll | | | |\n|And in the darkness bind them| And four for the boys | Into the mists of time | | | |");
 }

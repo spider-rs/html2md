@@ -1,7 +1,5 @@
 use super::StructuredPrinter;
 use super::TagHandler;
-
-use auto_encoder::encode_bytes_from_language;
 use html5ever::serialize;
 use html5ever::serialize::{SerializeOpts, TraversalScope};
 use markup5ever_rcdom::{Handle, NodeData, SerializableHandle};
@@ -50,7 +48,8 @@ impl TagHandler for IdentityHandler {
         }
 
         // make sure to have encoding
-        let conv = encode_bytes_from_language(&buffer, "");
+        let conv = auto_encoder::auto_encode_bytes(&buffer);
+
         printer.append_str(&conv);
     }
 

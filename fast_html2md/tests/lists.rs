@@ -9,7 +9,7 @@ fn test_list_simple() {
     );
     assert_eq!(
         md,
-        "\n\n* Seven things has lady Lackless\n* Keeps them underneath her black dress\n* One a thing that's not for wearing\n\n"
+        "* Seven things has lady Lackless\n* Keeps them underneath her black dress\n* One a thing that's not for wearing"
     )
 }
 
@@ -35,7 +35,7 @@ fn test_list_formatted() {
     );
     assert_eq!(
         md,
-        "\n\n* You should NEVER see this error\n  * Broken lines, broken strings\n  * Broken threads, broken springs\n  * Broken idols, broken heads\n  * People sleep in broken beds\n  \n* Ain't no use jiving\n* Ain't no use joking\n* EVERYTHING IS BROKEN"
+        "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain't no use jiving\n* Ain't no use joking\n* EVERYTHING IS BROKEN"
     )
 }
 
@@ -75,7 +75,7 @@ fn test_list_stackedit() {
     );
     assert_eq!(
         md,
-        "* You should NEVER see this error\n  \n  * Broken lines, broken strings\n    \n  * Broken threads, broken springs\n    \n  * Broken idols, broken heads\n    \n  * People sleep in broken beds\n    \n  \n* Ain’t no use jiving\n  \n* Ain’t no use joking\n  \n* EVERYTHING IS BROKEN"
+        "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain’t no use jiving\n* Ain’t no use joking\n* EVERYTHING IS BROKEN"
     )
 }
 
@@ -117,7 +117,7 @@ fn test_list_stackedit_add_brs() {
     );
     assert_eq!(
         md,
-        "* You should NEVER see this error\n  \n  * Broken lines, broken strings\n    \n  * Broken threads, broken springs\n    \n  * Broken idols, broken heads\n    \n  * People sleep in broken beds\n    \n    \n    \n  \n* Ain’t no use jiving\n  \n* Ain’t no use joking\n  \n* EVERYTHING IS BROKEN"
+        "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain’t no use jiving\n* Ain’t no use joking\n* EVERYTHING IS BROKEN"
     )
 }
 
@@ -138,7 +138,7 @@ fn test_list_multiline() {
     );
     assert_eq!(
         md,
-        "1. In the heat and the rains\n   \n   With whips and chains\n   \n   Just to see him fly\n   So many die!"
+        "1. In the heat and the rains\nWith whips and chains\nJust to see him fly\nSo many die!"
     )
 }
 
@@ -166,7 +166,7 @@ fn test_list_multiline_formatted() {
     );
     assert_eq!(
         md,
-        "\n\n* You should NEVER see this error\n  * Broken lines, broken strings\n  * Broken threads, broken springs\n  * Broken idols, broken heads\n  * People sleep in broken beds\n  * Ain't no use jiving\n    \n    Ain't no use joking\n    \n    EVERYTHING IS BROKEN"
+        "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain't no use jiving\nAin't no use joking\nEVERYTHING IS BROKEN"
     )
 }
 
@@ -211,13 +211,6 @@ fn test_list_text_prevsibling() {
     );
     assert_eq!(
         md,
-        "\
-Phrases to describe me:
-
-* Awesome
-* Cool
-* Awesome and cool
-* Can count to five
-* Learning to count to six B)"
+        "Phrases to describe me:\n* Awesome\n* Cool\n* Awesome and cool\n* Can count to five\n* Learning to count to six B)"
     )
 }

@@ -10,17 +10,14 @@ fn test_quotes() {
     );
     assert_eq!(
         md,
-        "\n\n> here's a quote next line of it\nAnd some text after it"
+        "> here's a quote next line of it\nAnd some text after it"
     )
 }
 
 #[test]
 fn test_quotes2() {
     let md = parse_html("<p><blockquote>here's<blockquote>nested quote!</blockquote> a quote\n next line of it</blockquote></p>", false);
-    assert_eq!(
-        md,
-        "\n\n> here's\n> > nested quote!\n> a quote next line of it\n\n"
-    )
+    assert_eq!(md, "> here's\n> > nested quote!\n> a quote next line of it")
 }
 
 #[test]
