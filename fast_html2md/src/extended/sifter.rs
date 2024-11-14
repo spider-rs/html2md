@@ -1,5 +1,5 @@
-use std::str;
 use auto_encoder::auto_encode_bytes;
+use std::str;
 
 /// Charector handling bytes.
 enum Character {
@@ -81,7 +81,6 @@ fn extend_from_bytes_with_len(bytes: &[u8], ind: &mut usize, out: &mut String, l
     if *ind <= end && end <= bytes.len() {
         // Todo: we want to pass in the bytes encoded to string.
         out.push_str(&auto_encode_bytes(&bytes[*ind..end]));
-
     }
     *ind = end;
 }

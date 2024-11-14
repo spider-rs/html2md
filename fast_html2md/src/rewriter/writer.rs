@@ -1,4 +1,6 @@
+use super::iframes::handle_iframe;
 use crate::clean_markdown;
+
 use lol_html::doc_comments;
 use lol_html::html_content::ContentType::Text;
 use lol_html::html_content::Element;
@@ -42,6 +44,12 @@ fn handle_tag(element: &mut Element) -> Result<(), Box<dyn std::error::Error + S
             insert_newline(element);
         }
         "p" => element.before("\n", Text),
+        "hr" => {
+            insert_newline(element);
+            element.append("---", Text);
+            insert_newline(element);
+        }
+        "br" => insert_newline(element),
         "li" => element.before("* ", Text),
         "a" => {
             if let Some(href) = element.get_attribute("href") {
@@ -70,6 +78,9 @@ fn handle_tag(element: &mut Element) -> Result<(), Box<dyn std::error::Error + S
         }
         "td" => {
             element.after(" | ", Text);
+        }
+        "iframe" => {
+            let _ = handle_iframe(element);
         }
         _ => (),
     }
