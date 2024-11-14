@@ -1,10 +1,9 @@
-use html2md::parse_html;
+use html2md::{parse_html, rewrite_html};
 use pretty_assertions::assert_eq;
 
 #[test]
 fn test_tables() {
-    let md = parse_html(
-        r#"<table>
+    let s = r#"<table>
   <thead>
     <tr>
       <th scope='col'>Minor1</th>
@@ -21,13 +20,20 @@ fn test_tables() {
       <td>col4</td>
     </tr>
   </tbody>
-</table>"#,
-        false,
-    );
+</table>"#;
+
+    let md = parse_html(s, false);
 
     assert_eq!(
         md,
         "|Minor1|Minor2|Minor3|Minor4|\n|||||\n| col1 | col2 | col3 | col4 |"
+    );
+
+    let md = rewrite_html(s, false);
+
+    assert_eq!(
+        md,
+        "| **Minor1** | **Minor2** | **Minor3** | **Minor4** | |\n| col1 | col2 | col3 | col4 | |"
     );
 }
 

@@ -1,3 +1,4 @@
+pub(crate) mod anchors;
 pub(crate) mod counter;
 pub(crate) mod iframes;
 pub(crate) mod images;

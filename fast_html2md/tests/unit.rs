@@ -1,53 +1,68 @@
-use html2md::parse_html;
+use html2md::{parse_html, rewrite_html};
 use pretty_assertions::assert_eq;
 
 #[test]
 fn test_dumb() {
     let md = parse_html("<p>CARTHAPHILUS</p>", false);
+    assert_eq!(md, "CARTHAPHILUS");
+    let md = rewrite_html("<p>CARTHAPHILUS</p>", false);
     assert_eq!(md, "CARTHAPHILUS")
 }
 
 #[test]
 // fixme
 fn test_space() {
-    let md = parse_html(r#"<p><a href="http://ya.ru">APOSIMZ</a></p>\n"#, false);
-    assert_eq!(md, "[APOSIMZ](http://ya.ru)\n\\\\n")
+    let s = r#"<p><a href="http://ya.ru">APOSIMZ</a></p>\n"#;
+    let md = parse_html(s, false);
+    assert_eq!(md, "[APOSIMZ](http://ya.ru)\n\\\\n");
+    let md = rewrite_html(s, false);
+    assert_eq!(md, "[APOSIMZ](http://ya.ru)\n\\n");
 }
 
 #[test]
 fn test_anchor() {
     let md = parse_html(r#"<p><a href="http://ya.ru">APOSIMZ</a></p>"#, false);
-    assert_eq!(md, "[APOSIMZ](http://ya.ru)")
+    assert_eq!(md, "[APOSIMZ](http://ya.ru)");
+    let md = rewrite_html(r#"<p><a href="http://ya.ru">APOSIMZ</a></p>"#, false);
+    assert_eq!(md, "[APOSIMZ](http://ya.ru)");
 }
 
 #[test]
 fn test_anchor2() {
-    let md = parse_html(
-        r#"<p><a href="http://ya.ru">APOSIMZ</a><a href="http://yandex.ru">SIDONIA</a></p>"#,
-        false,
-    );
-    assert_eq!(md, "[APOSIMZ](http://ya.ru)[SIDONIA](http://yandex.ru)")
+    let s = r#"<p><a href="http://ya.ru">APOSIMZ</a><a href="http://yandex.ru">SIDONIA</a></p>"#;
+
+    let md = parse_html(s, false);
+    assert_eq!(md, "[APOSIMZ](http://ya.ru)[SIDONIA](http://yandex.ru)");
+    let md = rewrite_html(s, false);
+    assert_eq!(md, "[APOSIMZ](http://ya.ru)[SIDONIA](http://yandex.ru)");
 }
 
 #[test]
 fn test_anchor3() {
-    let md = parse_html(
-        r#"<p><a href="http://ya.ru">APOSIMZ</a><p/><a href="http://yandex.ru">SIDONIA</a></p>"#,
-        false,
-    );
-    assert_eq!(md, "[APOSIMZ](http://ya.ru)\n[SIDONIA](http://yandex.ru)")
+    let s =
+        r#"<p><a href="http://ya.ru">APOSIMZ</a><p/><a href="http://yandex.ru">SIDONIA</a></p>"#;
+    let m = "[APOSIMZ](http://ya.ru)\n[SIDONIA](http://yandex.ru)";
+    let md = parse_html(s, false);
+    assert_eq!(md, m);
+    let md = rewrite_html(s, false);
+    assert_eq!(md, m)
 }
 
 #[test]
 /// The destination can only contain spaces if it is enclosed in pointy brackets:  
 /// [Commonmark: Example 489](https://spec.commonmark.org/0.31.2/#example-489)
 fn test_anchor4() {
-    let md = parse_html(r#"<p><a href="/my%20uri">link</a></p>"#, false);
-    assert_eq!(
-        md,
-        "\
-[link](</my uri>)"
-    )
+    let s = r#"<p><a href="/my%20uri">link</a></p>"#;
+    let m = "\
+[link](</my uri>)";
+
+    let md = parse_html(s, false);
+
+    assert_eq!(md, m);
+
+    let md = rewrite_html(s, false);
+
+    assert_eq!(md, m);
 }
 
 #[test]
@@ -61,14 +76,14 @@ fn test_image() {
 
 #[test]
 fn test_escaping() {
-    let md = parse_html(
-        r#"<p>*god*'s in his **heaven** - all is right with the __world__</p>"#,
-        false,
-    );
-    assert_eq!(
-        md,
-        "\\*god\\*\'s in his \\*\\*heaven\\*\\* - all is right with the \\_\\_world\\_\\_"
-    )
+    let s = r#"<p>*god*'s in his **heaven** - all is right with the __world__</p>"#;
+    let m = "\\*god\\*\'s in his \\*\\*heaven\\*\\* - all is right with the \\_\\_world\\_\\_";
+
+    let md = parse_html(s, false);
+    assert_eq!(md, m);
+
+    let md = rewrite_html(s, false);
+    assert_eq!(md, m);
 }
 
 #[test]

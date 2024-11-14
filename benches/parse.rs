@@ -23,6 +23,20 @@ pub fn bench_speed(c: &mut Criterion) {
         b.iter(|| black_box(rewrite_html(&html, false)))
     });
 
+    let path = std::path::Path::new("../test-samples/wiki/en-wikipedia-org_wiki_Cat.html");
+
+    let mut html = String::new();
+    let mut html_file = File::open(path).unwrap();
+    html_file.read_to_string(&mut html).unwrap();
+
+    group.bench_function(format!("Scraper wiki-cat: {}", sample_title), |b| {
+        b.iter(|| black_box(parse_html(&html, false)))
+    });
+
+    group.bench_function(format!("Rewriter wiki-cat: {}", sample_title), |b| {
+        b.iter(|| black_box(rewrite_html(&html, false)))
+    });
+
     group.finish();
 }
 

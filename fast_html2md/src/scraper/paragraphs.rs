@@ -31,7 +31,7 @@ impl TagHandler for ParagraphHandler {
                 printer.append_str("---");
                 printer.insert_newline();
             }
-            "br" => printer.append_str("\n"), // we prob want nbsp here.
+            "br" => printer.insert_newline(), // we prob want nbsp here.
             _ => (),
         }
     }

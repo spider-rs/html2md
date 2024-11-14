@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use std::boxed::Box;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use url::Url;
 
@@ -51,11 +52,6 @@ use tables::TableHandler;
 
 lazy_static! {
     static ref EXCESSIVE_WHITESPACE_PATTERN: Regex = Regex::new("\\s{2,}").expect("valid regex pattern");   // for HTML on-the-fly cleanup
-    static ref EMPTY_LINE_PATTERN: Regex = Regex::new("(?m)^ +$").expect("valid regex pattern");            // for Markdown post-processing
-    static ref EXCESSIVE_NEWLINE_PATTERN: Regex = Regex::new("\\n{3,}").expect("valid regex pattern");      // for Markdown post-processing
-    static ref TRAILING_SPACE_PATTERN: Regex = Regex::new("(?m)(\\S) $").expect("valid regex pattern");     // for Markdown post-processing
-    static ref LEADING_NEWLINES_PATTERN: Regex = Regex::new("^\\n+").expect("valid regex pattern");         // for Markdown post-processing
-    static ref LAST_WHITESPACE_PATTERN: Regex = Regex::new("\\s+$").expect("valid regex pattern");          // for Markdown post-processing
     static ref START_OF_LINE_PATTERN: Regex = Regex::new("(^|\\n) *$").expect("valid regex pattern");                  // for Markdown escaping
     static ref MARKDOWN_STARTONLY_KEYCHARS: Regex = Regex::new(r"^(\s*)([=>+\-#])").expect("valid regex pattern");     // for Markdown escaping
     static ref MARKDOWN_MIDDLE_KEYCHARS: Regex = Regex::new(r"[<>*\\_~]").expect("valid regex pattern");               // for Markdown escaping
@@ -149,7 +145,7 @@ pub fn parse_html(html: &str, commonmark: bool) -> String {
 /// # Arguments
 /// `html` is source HTML as `String`
 pub fn rewrite_html(html: &str, commonmark: bool) -> String {
-    rewriter::writer::convert_html_to_markdown(html, commonmark, &None).unwrap_or_default()
+    rewriter::writer::convert_html_to_markdown(html, &None, commonmark, &None).unwrap_or_default()
 }
 
 /// Custom variant of rewrite function.
@@ -157,10 +153,16 @@ pub fn rewrite_html(html: &str, commonmark: bool) -> String {
 /// You can also override standard tag handlers this way
 /// # Arguments
 /// `html` is source HTML as `String`
+/// `custom` is custom tag hadler producers for tags you want, can be empty
 /// `commonmark` is for adjusting markdown output to commonmark
 /// `url` is used to provide absolute url handling
-pub fn rewrite_html_with_url(html: &str, commonmark: bool, url: &Option<Url>) -> String {
-    rewriter::writer::convert_html_to_markdown(html, commonmark, url).unwrap_or_default()
+pub fn rewrite_html_custom_with_url(
+    html: &str,
+    custom: &Option<HashSet<String>>,
+    commonmark: bool,
+    url: &Option<Url>,
+) -> String {
+    rewriter::writer::convert_html_to_markdown(html, &custom, commonmark, url).unwrap_or_default()
 }
 
 /// Same as `parse_html` but retains all "span" html elements intact
@@ -385,6 +387,7 @@ pub(crate) fn valid_block_element(node: &NodeData) -> bool {
         _ => true,
     }
 }
+
 /// This conversion should only be applied to text tags
 ///
 /// Escapes text inside HTML tags so it won't be recognized as Markdown control sequence
@@ -396,7 +399,7 @@ fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
 /// Called after all processing has been finished
 ///
 /// Clears excessive punctuation that would be trimmed by renderer anyway
-fn clean_markdown(input: &str) -> String {
+pub fn clean_markdown(input: &str) -> String {
     input.sift().into()
 }
 
