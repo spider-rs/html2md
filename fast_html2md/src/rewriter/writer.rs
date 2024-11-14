@@ -1,11 +1,15 @@
 use super::iframes::handle_iframe;
 use super::images::rewrite_image_element;
+use super::lists::handle_list_or_item;
+use super::quotes::{rewrite_blockquote_element, rewrite_blockquote_text};
+use super::styles::rewrite_style_element;
 use crate::clean_markdown;
-use lol_html::doc_comments;
 use lol_html::html_content::ContentType::Text;
 use lol_html::html_content::Element;
+use lol_html::{doc_comments, text};
 use lol_html::{element, rewrite_str, RewriteStrSettings};
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 use url::Url;
 
 /// Insert a new line
@@ -20,11 +24,32 @@ fn handle_tag(
     element: &mut Element,
     commonmark: bool,
     url: &Option<Url>,
+    list_type: Rc<RefCell<Option<String>>>,
+    order_counter: Rc<RefCell<usize>>,
+    quote_depth: Rc<RefCell<usize>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    element.remove_and_keep_content();
+    let element_name = element.tag_name();
+
+    let remove_attrs =
+        commonmark && (element_name.as_str() == "sub" || element_name.as_str() == "sup");
+
+    // check common mark includes.
+    if remove_attrs {
+        let attrs = element
+            .attributes()
+            .iter()
+            .map(|f| f.name())
+            .collect::<Vec<String>>();
+
+        for attr in attrs.iter() {
+            element.remove_attribute(&attr);
+        }
+    } else {
+        element.remove_and_keep_content();
+    }
 
     // Add the markdown equivalents before the element.
-    match element.tag_name().as_str() {
+    match element_name.as_str() {
         "h1" => {
             element.before("# ", Text);
             insert_newline(element);
@@ -56,7 +81,6 @@ fn handle_tag(
             insert_newline(element);
         }
         "br" => insert_newline(element),
-        "li" => element.before("* ", Text),
         "a" => {
             if let Some(href) = element.get_attribute("href") {
                 element.before("[", lol_html::html_content::ContentType::Text);
@@ -65,7 +89,6 @@ fn handle_tag(
                     lol_html::html_content::ContentType::Text,
                 );
                 element.set_inner_content("", lol_html::html_content::ContentType::Text);
-                // Remove content tags.
             }
         }
         "img" => {
@@ -85,6 +108,15 @@ fn handle_tag(
         "iframe" => {
             let _ = handle_iframe(element);
         }
+        "b" | "i" | "s" | "strong" | "em" | "del" => {
+            let _ = rewrite_style_element(element);
+        }
+        "ol" | "ul" | "menu" | "li" => {
+            let _ = handle_list_or_item(element, list_type.clone(), order_counter.clone());
+        }
+        "q" | "cite" | "blockquote" => {
+            let _ = rewrite_blockquote_element(element, quote_depth);
+        }
         _ => (),
     }
 
@@ -96,18 +128,39 @@ pub fn get_rewriter_settings(
     commonmark: bool,
     url: Option<Url>,
 ) -> RewriteStrSettings<'static, 'static> {
+    let list_type = Rc::new(RefCell::new(None));
+    let order_counter = Rc::new(RefCell::new(0));
+    let quote_depth = Rc::new(RefCell::new(0));
+
+    let quote_depth1 = quote_depth.clone();
+
     RewriteStrSettings {
         document_content_handlers: vec![doc_comments!(|c| {
             c.remove();
             Ok(())
         })],
         element_content_handlers: vec![
-            element!("head, nav, svg", |el| {
+            text!("blockquote, q, cite", move |el| {
+                let _ = rewrite_blockquote_text(el, quote_depth1.clone());
+                Ok(())
+            }),
+            text!("summary, details", move |el| {
+                *el.as_mut_str() = el.as_str().trim().into();
+                Ok(())
+            }),
+            element!("head, nav", |el| {
                 el.remove();
                 Ok(())
             }),
             element!("*:not(script):not(head):not(style):not(svg)", move |el| {
-                let _ = handle_tag(el, commonmark, &url);
+                let _ = handle_tag(
+                    el,
+                    commonmark,
+                    &url,
+                    list_type.clone(),
+                    order_counter.clone(),
+                    quote_depth.clone(),
+                );
                 Ok(())
             }),
         ],

@@ -1,4 +1,4 @@
-name: Rust
+name: Bench
 on:
   push:
     branches: [main]

@@ -1,23 +1,24 @@
-use html2md::parse_html;
+use html2md::{parse_html, rewrite_html};
 use pretty_assertions::assert_eq;
 
 #[test]
 fn test_list_simple() {
-    let md = parse_html(
-        r#"<p><ul><li>Seven things has lady Lackless</li><li>Keeps them underneath her black dress</li><li>One a thing that's not for wearing</li></ul></p>"#,
-        false,
-    );
+    let s = r#"<p><ul><li>Seven things has lady Lackless</li><li>Keeps them underneath her black dress</li><li>One a thing that's not for wearing</li></ul></p>"#;
+    let md = parse_html(s, false);
     assert_eq!(
         md,
         "* Seven things has lady Lackless\n* Keeps them underneath her black dress\n* One a thing that's not for wearing"
-    )
+    );
+    let md = rewrite_html(s, false);
+    assert_eq!(
+        md,
+        "* Seven things has lady Lackless\n* Keeps them underneath her black dress\n* One a thing that's not for wearing"
+    );
 }
 
 #[test]
 fn test_list_formatted() {
-    // let's use some some broken html
-    let md = parse_html(
-        r#"
+    let s = r#"
         <ul><p>
             <li>You should NEVER see this error
                 <ul>
@@ -30,19 +31,24 @@ fn test_list_formatted() {
             <li>Ain't no use jiving</li>
             <li>Ain't no use joking</li>
             <li>EVERYTHING IS BROKEN
-    "#,
-        false,
-    );
+    "#;
+
+    // let's use some some broken html
+    let md = parse_html(s, false);
     assert_eq!(
         md,
         "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain't no use jiving\n* Ain't no use joking\n* EVERYTHING IS BROKEN"
-    )
+    );
+    let md = rewrite_html(s, false);
+    assert_eq!(
+        md,
+        "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain't no use jiving\n* Ain't no use joking\n* EVERYTHING IS BROKEN"
+    );
 }
 
 #[test]
 fn test_list_stackedit() {
-    let md = parse_html(
-        r#"
+    let s = r#"
     <ul>
         <li>
             <p>You should NEVER see this error</p>
@@ -70,19 +76,20 @@ fn test_list_stackedit() {
             <li>
             <p>EVERYTHING IS BROKEN</p>
             </li>
-    </ul>"#,
-        false,
-    );
-    assert_eq!(
-        md,
-        "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain’t no use jiving\n* Ain’t no use joking\n* EVERYTHING IS BROKEN"
-    )
+    </ul>"#;
+
+    let m = "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain’t no use jiving\n* Ain’t no use joking\n* EVERYTHING IS BROKEN";
+
+    let md = parse_html(s, false);
+    assert_eq!(md, m);
+
+    let md = rewrite_html(s, false);
+    assert_eq!(md, m);
 }
 
 #[test]
 fn test_list_stackedit_add_brs() {
-    let md = parse_html(
-        r#"
+    let s = r#"
     <ul>
         <li>
             <p>You should NEVER see this error</p>
@@ -112,19 +119,19 @@ fn test_list_stackedit_add_brs() {
             <li>
             <p>EVERYTHING IS BROKEN</p>
             </li>
-    </ul>"#,
-        false,
-    );
-    assert_eq!(
-        md,
-        "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain’t no use jiving\n* Ain’t no use joking\n* EVERYTHING IS BROKEN"
-    )
+    </ul>"#;
+
+    let m =  "* You should NEVER see this error\n* Broken lines, broken strings\n* Broken threads, broken springs\n* Broken idols, broken heads\n* People sleep in broken beds\n* Ain’t no use jiving\n* Ain’t no use joking\n* EVERYTHING IS BROKEN";
+
+    let md = parse_html(s, false);
+    assert_eq!(md, m);
+    let md = rewrite_html(s, false);
+    assert_eq!(md, m);
 }
 
 #[test]
 fn test_list_multiline() {
-    let md = parse_html(
-        r#"
+    let s = r#"
         <ol>
             <li>
                 <p>In the heat and the rains</p>
@@ -133,13 +140,15 @@ fn test_list_multiline() {
             
             </li>
         </ol>
-    "#,
-        false,
-    );
-    assert_eq!(
-        md,
-        "1. In the heat and the rains\nWith whips and chains\nJust to see him fly\nSo many die!"
-    )
+    "#;
+
+    let m =
+        "1. In the heat and the rains\nWith whips and chains\nJust to see him fly\nSo many die!";
+
+    let md = parse_html(s, false);
+    assert_eq!(md, m);
+    let md = rewrite_html(s, false);
+    assert_eq!(md, m);
 }
 
 #[test]
@@ -172,32 +181,31 @@ fn test_list_multiline_formatted() {
 
 #[test]
 fn test_list_ordered() {
-    // let's use some some broken html
-    let md = parse_html(
-        r#"
+    let s = r#"
         <ol>
             <li>Now did you read the news today?</li>
             <li>They say the danger's gone away</li>
             <li>Well I can see the fire still alight</li>
             <li>Burning into the night</li>
         </ol>
-    "#,
-        false,
-    );
-    assert_eq!(
-        md,
-        "\
+    "#;
+
+    let m = "\
 1. Now did you read the news today?
 2. They say the danger's gone away
 3. Well I can see the fire still alight
-4. Burning into the night"
-    )
+4. Burning into the night";
+
+    // let's use some some broken html
+    let md = parse_html(s, false);
+    assert_eq!(md, m);
+    let md = rewrite_html(s, false);
+    assert_eq!(md, m);
 }
 
 #[test]
 fn test_list_text_prevsibling() {
-    let md = parse_html(
-        r#"
+    let s = r#"
         Phrases to describe me:
         <ul>
             <li>Awesome</li>
@@ -206,11 +214,12 @@ fn test_list_text_prevsibling() {
             <li>Can count to five</li>
             <li>Learning to count to six B)</li>
         </ul>
-    "#,
-        false,
-    );
-    assert_eq!(
-        md,
-        "Phrases to describe me:\n* Awesome\n* Cool\n* Awesome and cool\n* Can count to five\n* Learning to count to six B)"
-    )
+    "#;
+
+    let m =  "Phrases to describe me:\n* Awesome\n* Cool\n* Awesome and cool\n* Can count to five\n* Learning to count to six B)";
+
+    let md = parse_html(s, false);
+    assert_eq!(md, m);
+    let md = rewrite_html(s, false);
+    assert_eq!(md, m);
 }
