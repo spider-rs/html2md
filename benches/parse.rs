@@ -20,7 +20,7 @@ pub fn bench_speed(c: &mut Criterion) {
     });
 
     group.bench_function(format!("Rewriter real-world-1: {}", sample_title), |b| {
-        b.iter(|| black_box(rewrite_html(&html)))
+        b.iter(|| black_box(rewrite_html(&html, false)))
     });
 
     group.finish();

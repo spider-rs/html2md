@@ -1,10 +1,12 @@
 use super::iframes::handle_iframe;
+use super::images::rewrite_image_element;
 use crate::clean_markdown;
-
 use lol_html::doc_comments;
 use lol_html::html_content::ContentType::Text;
 use lol_html::html_content::Element;
 use lol_html::{element, rewrite_str, RewriteStrSettings};
+use std::sync::Arc;
+use url::Url;
 
 /// Insert a new line
 #[inline]
@@ -14,7 +16,11 @@ pub fn insert_newline(element: &mut Element) {
 
 /// Handle the lol_html tag.
 #[inline]
-fn handle_tag(element: &mut Element) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn handle_tag(
+    element: &mut Element,
+    commonmark: bool,
+    url: &Option<Url>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     element.remove_and_keep_content();
 
     // Add the markdown equivalents before the element.
@@ -63,11 +69,8 @@ fn handle_tag(element: &mut Element) -> Result<(), Box<dyn std::error::Error + S
             }
         }
         "img" => {
-            let alt = element.get_attribute("alt").unwrap_or_default();
-            let src = element.get_attribute("src").unwrap_or_default();
-            element.replace(&format!("![{}]({})", alt, src), Text);
+            let _ = rewrite_image_element(element, commonmark, &url);
         }
-
         "tr" => {
             element.before("| ", Text);
             element.after(" |\n", Text);
@@ -89,7 +92,10 @@ fn handle_tag(element: &mut Element) -> Result<(), Box<dyn std::error::Error + S
 }
 
 /// Get the HTML rewriter settings to convert ot markdown.
-pub fn get_rewriter_settings() -> RewriteStrSettings<'static, 'static> {
+pub fn get_rewriter_settings(
+    commonmark: bool,
+    url: Option<Url>,
+) -> RewriteStrSettings<'static, 'static> {
     RewriteStrSettings {
         document_content_handlers: vec![doc_comments!(|c| {
             c.remove();
@@ -100,8 +106,8 @@ pub fn get_rewriter_settings() -> RewriteStrSettings<'static, 'static> {
                 el.remove();
                 Ok(())
             }),
-            element!("*:not(script):not(head):not(style):not(svg)", |el| {
-                let _ = handle_tag(el);
+            element!("*:not(script):not(head):not(style):not(svg)", move |el| {
+                let _ = handle_tag(el, commonmark, &url);
                 Ok(())
             }),
         ],
@@ -110,8 +116,12 @@ pub fn get_rewriter_settings() -> RewriteStrSettings<'static, 'static> {
 }
 
 /// Convert to markdown streaming re-writer
-pub(crate) fn convert_html_to_markdown(html: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let settings = get_rewriter_settings();
+pub(crate) fn convert_html_to_markdown(
+    html: &str,
+    commonmark: bool,
+    url: &Option<Url>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let settings = get_rewriter_settings(commonmark, url.clone());
 
     match rewrite_str(&Box::new(html), settings) {
         Ok(markdown) => Ok(clean_markdown(&markdown)),

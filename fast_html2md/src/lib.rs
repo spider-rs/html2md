@@ -148,8 +148,19 @@ pub fn parse_html(html: &str, commonmark: bool) -> String {
 /// and returns converted string. Incomplete work in progress for major performance increases.
 /// # Arguments
 /// `html` is source HTML as `String`
-pub fn rewrite_html(html: &str) -> String {
-    rewriter::writer::convert_html_to_markdown(html).unwrap_or_default()
+pub fn rewrite_html(html: &str, commonmark: bool) -> String {
+    rewriter::writer::convert_html_to_markdown(html, commonmark, &None).unwrap_or_default()
+}
+
+/// Custom variant of rewrite function.
+///
+/// You can also override standard tag handlers this way
+/// # Arguments
+/// `html` is source HTML as `String`
+/// `commonmark` is for adjusting markdown output to commonmark
+/// `url` is used to provide absolute url handling
+pub fn rewrite_html_with_url(html: &str, commonmark: bool, url: &Option<Url>) -> String {
+    rewriter::writer::convert_html_to_markdown(html, commonmark, url).unwrap_or_default()
 }
 
 /// Same as `parse_html` but retains all "span" html elements intact

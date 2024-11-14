@@ -189,11 +189,10 @@ fn test_html_from_text_rewrite() {
         .read_to_string(&mut html)
         .expect("File must be readable");
 
-    let result = html2md::rewrite_html(
+    let result = html2md::rewrite_html_with_url(
         &html,
-        // &tag_factory,
-        // false,
-        // &Some(Url::parse("https://spider.cloud").unwrap()),
+        false,
+        &Some(Url::parse("https://spider.cloud").unwrap()),
     );
 
     println!("{:?}", result);
