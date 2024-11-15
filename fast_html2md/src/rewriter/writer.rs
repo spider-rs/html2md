@@ -4,11 +4,11 @@ use super::images::rewrite_image_element;
 use super::lists::handle_list_or_item;
 use super::quotes::{rewrite_blockquote_element, rewrite_blockquote_text};
 use super::styles::rewrite_style_element;
-use crate::{clean_markdown, escape_markdown_base};
+use crate::clean_markdown_bytes;
 use lol_html::html_content::ContentType::{Html, Text};
 use lol_html::html_content::Element;
-use lol_html::{doc_comments, text};
-use lol_html::{element, rewrite_str, RewriteStrSettings};
+use lol_html::{doc_comments, doctype, text};
+use lol_html::{element, RewriteStrSettings};
 use std::cell::RefCell;
 use std::rc::Rc;
 use url::Url;
@@ -254,6 +254,10 @@ pub fn get_rewriter_settings(
         document_content_handlers: vec![doc_comments!(|c| {
             c.remove();
             Ok(())
+        }),
+        doctype!(|c| {
+            c.remove();
+            Ok(())
         })],
         element_content_handlers,
         ..RewriteStrSettings::default()
@@ -270,7 +274,24 @@ pub(crate) fn convert_html_to_markdown(
     let settings = get_rewriter_settings(commonmark, custom, url.clone());
 
     match rewrite_str(&Box::new(html), settings) {
-        Ok(markdown) => Ok(clean_markdown(&markdown)),
+        Ok(markdown) => Ok(clean_markdown_bytes(&markdown)),
         Err(e) => Err(e.into()),
     }
+}
+
+/// Shortcut to rewrite string and encode correctly
+pub fn rewrite_str<'h, 's, H: lol_html::HandlerTypes>(
+    html: &str,
+    settings: impl Into<lol_html::Settings<'h, 's, H>>,
+) -> Result<Vec<u8>, lol_html::errors::RewritingError> {
+    let mut output = vec![];
+
+    let mut rewriter = lol_html::HtmlRewriter::new(settings.into(), |c: &[u8]| {
+        output.extend_from_slice(c);
+    });
+
+    rewriter.write(html.as_bytes())?;
+    rewriter.end()?;
+
+    Ok(output)
 }

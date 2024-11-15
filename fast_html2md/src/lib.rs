@@ -1,3 +1,4 @@
+use extended::sifter::WhitespaceSifterBytes;
 use html5ever::driver::ParseOpts;
 use html5ever::parse_document;
 use html5ever::tendril::TendrilSink;
@@ -404,7 +405,14 @@ fn escape_markdown(result: &StructuredPrinter, text: &str) -> String {
 ///
 /// Clears excessive punctuation that would be trimmed by renderer anyway
 pub fn clean_markdown(input: &str) -> String {
-    input.sift().into()
+    input.sift()
+}
+
+/// Called after all processing has been finished
+///
+/// Clears excessive punctuation that would be trimmed by renderer anyway
+pub fn clean_markdown_bytes(input: &Vec<u8>) -> String {
+    input.sift_bytes()
 }
 
 /// Intermediate result of HTML -> Markdown conversion.

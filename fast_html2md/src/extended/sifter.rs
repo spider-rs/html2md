@@ -46,7 +46,43 @@ pub trait WhitespaceSifter: AsRef<str> {
     }
 }
 
+/// A trait containing all `Vec<u8>` whitespace-sifting functions.
+pub trait WhitespaceSifterBytes: AsRef<[u8]> {
+    /// This removes duplicate whitespaces from a `Vec<u8>`.
+    /// It supports the same whitespace definition as [char::is_ascii_whitespace].
+    #[must_use]
+    fn sift_bytes(&self) -> String {
+        let input = self.as_ref();
+        let mut out: String = String::with_capacity(input.len());
+        sift_preallocated(input, &mut out);
+        out
+    }
+
+    /// This removes duplicate whitespaces from a `Vec<u8>`.
+    /// It preserves deduplicated newlines.
+    #[must_use]
+    fn sift_bytes_preserve_newlines(&self) -> String {
+        let bytes = self.as_ref();
+        let mut out = String::with_capacity(bytes.len());
+        let mut ind: usize = 0;
+
+        while ind < bytes.len() {
+            sift_preallocated_until_newline(bytes, &mut ind, &mut out);
+        }
+
+        if out.ends_with("\r\n") {
+            let _ = out.pop();
+            let _ = out.pop();
+        } else if out.ends_with('\n') {
+            let _ = out.pop();
+        }
+
+        out
+    }
+}
+
 impl<T: AsRef<str>> WhitespaceSifter for T {}
+impl<T: AsRef<[u8]>> WhitespaceSifterBytes for T {}
 
 /// A custom implementation of `str::trim_start`.
 fn sift_trim_start(bytes: &[u8], ind: &mut usize, out: &mut String) {
