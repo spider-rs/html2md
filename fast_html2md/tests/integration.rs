@@ -157,7 +157,7 @@ fn test_tables_crash2() {
 
     let table_with_vertical_header = rewrite_html(&html, false);
 
-    let m = indoc! { "xxxxx xxxxxxxxxx xxxxxxx x xxxxx))~~xxxxxxxx xxxxxxxx~~\n## At a Glance\n&nbsp;| **Current Conditions:** | Open all year. No reservations. No services.&nbsp; | |\n| **Reservations:** | No reservations.&nbsp; | |\n| **Fees** | No fee.&nbsp; | |\n| **Water:** | No water. | |"};
+    let m = indoc! { "xxxxx xxxxxxxxxx xxxxxxx x xxxxx))~~xxxxxxxx xxxxxxxx~~\n## At a Glance\n|Current Conditions:|Open all year. No reservations. No services.|\nReservations:|No reservations.|\nFees|No fee.|\nWater:|No water.|"};
 
     assert_that!(table_with_vertical_header).contains(m);
 }

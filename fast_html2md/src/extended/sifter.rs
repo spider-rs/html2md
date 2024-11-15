@@ -79,8 +79,8 @@ fn extend_from_bytes_with_len(bytes: &[u8], ind: &mut usize, out: &mut String, l
     let end = ind.saturating_add(len);
     // Check bounds to ensure we don't run into an out-of-bounds error.
     if *ind <= end && end <= bytes.len() {
-        // Todo: we want to pass in the bytes encoded to string.
-        out.push_str(&auto_encode_bytes(&bytes[*ind..end]));
+        let output = auto_encode_bytes(&bytes[*ind..end]);
+        out.push_str(&output);
     }
     *ind = end;
 }

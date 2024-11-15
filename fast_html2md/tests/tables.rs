@@ -31,16 +31,12 @@ fn test_tables() {
 
     let md = rewrite_html(s, false);
 
-    assert_eq!(
-        md,
-        "| **Minor1** | **Minor2** | **Minor3** | **Minor4** | |\n| col1 | col2 | col3 | col4 | |"
-    );
+    assert_eq!(md, "|Minor1|Minor2|Minor3|Minor4|\ncol1|col2|col3|col4|");
 }
 
 #[test]
 fn test_tables_invalid_more_headers() {
-    let md = parse_html(
-        r#"<table>
+    let s = r#"<table>
   <thead>
     <tr>
       <th scope='col'>Minor1</th>
@@ -59,20 +55,26 @@ fn test_tables_invalid_more_headers() {
       <td>col4</td>
     </tr>
   </tbody>
-</table>"#,
-        false,
-    );
+</table>"#;
+
+    let m =
+        "|Minor1|Minor2|Minor3|Minor4|Minor5|Minor6|\n|||||||\n| col1 | col2 | col3 | col4 | | |";
+
+    let md = parse_html(s, false);
+
+    assert_eq!(md, m);
+
+    let md = rewrite_html(s, false);
 
     assert_eq!(
         md,
-        "|Minor1|Minor2|Minor3|Minor4|Minor5|Minor6|\n|||||||\n| col1 | col2 | col3 | col4 | | |"
+        "|Minor1|Minor2|Minor3|Minor4|Minor5|Minor6|\ncol1|col2|col3|col4|"
     );
 }
 
 #[test]
 fn test_tables_invalid_more_rows() {
-    let md = parse_html(
-        r#"<table>
+    let s = r#"<table>
   <thead>
     <tr>
       <th scope='col'>Minor1</th>
@@ -87,17 +89,22 @@ fn test_tables_invalid_more_rows() {
       <td>col4</td>
     </tr>
   </tbody>
-</table>"#,
-        false,
-    );
+</table>"#;
 
-    assert_eq!(md, "|Minor1|Minor2| | |\n|||||\n| col1 | col2 |col3|col4|");
+    let m = "|Minor1|Minor2| | |\n|||||\n| col1 | col2 |col3|col4|";
+
+    let md = parse_html(s, false);
+
+    assert_eq!(md, m);
+
+    let md = rewrite_html(s, false);
+
+    assert_eq!(md, "|Minor1|Minor2|\ncol1|col2|col3|col4|");
 }
 
 #[test]
 fn test_tables_odd_column_width() {
-    let md = parse_html(
-        r#"<table>
+    let s = r#"<table>
   <thead>
     <tr>
       <th scope='col'>Minor</th>
@@ -110,9 +117,9 @@ fn test_tables_odd_column_width() {
       <td>col2</td>
     </tr>
   </tbody>
-</table>"#,
-        false,
-    );
+</table>"#;
+
+    let md = parse_html(s, false);
 
     assert_eq!(md, "|Minor|Major|\n|||\n|col1 |col2 |");
 }

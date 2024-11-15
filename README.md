@@ -1,11 +1,22 @@
 # fast_html2md
 
-A Rust html to markdown crate built for performance.
+The fastest Rust html to markdown transformer.
 
 `cargo add fast_html2md`
 
+You can use a scraper or rewriter to transform. The rewriter is over 2-3 times faster.
+
 ```rust
 use html2md::parse_html;
+
+let md = parse_html("<p>JAMES</p>", false);
+assert_eq!(md, "JAMES")
+```
+
+Using a rewriter.
+
+```rust
+use html2md::rewrite_html;
 
 let md = parse_html("<p>JAMES</p>", false);
 assert_eq!(md, "JAMES")
@@ -24,7 +35,3 @@ assert_eq!(md, "JAMES")
     tag_factory.insert(String::from("noscript"), tag.clone());
     let html = html2md::parse_html_custom(&html, &tag_factory, false);
 ```
-
-## Notes
-
-This project is a practical rewrite from the original `html2md` with major bug fixes and performance improvements.

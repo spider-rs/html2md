@@ -55,6 +55,10 @@ lazy_static! {
     static ref START_OF_LINE_PATTERN: Regex = Regex::new("(^|\\n) *$").expect("valid regex pattern");                  // for Markdown escaping
     static ref MARKDOWN_STARTONLY_KEYCHARS: Regex = Regex::new(r"^(\s*)([=>+\-#])").expect("valid regex pattern");     // for Markdown escaping
     static ref MARKDOWN_MIDDLE_KEYCHARS: Regex = Regex::new(r"[<>*\\_~]").expect("valid regex pattern");               // for Markdown escaping
+    static ref MARKDOWN_MIDDLE_KEYCHARS_SET: regex::RegexSet = regex::RegexSet::new(&[
+        r"[<>*\\_~]",  // Matches any single markdown character
+        r"&nbsp;"      // Matches the entire "&nbsp;" string
+    ]).expect("valid regex set");
 }
 
 /// Custom variant of main function. Allows to pass custom tag<->tag factory pairs

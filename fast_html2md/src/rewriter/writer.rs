@@ -34,6 +34,7 @@ fn handle_tag(
     list_type: Rc<RefCell<Option<String>>>,
     order_counter: Rc<RefCell<usize>>,
     quote_depth: Rc<RefCell<usize>>,
+    inside_table: Rc<RefCell<bool>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let element_name = element.tag_name();
 
@@ -97,16 +98,28 @@ fn handle_tag(
         "img" => {
             let _ = rewrite_image_element(element, commonmark, &url);
         }
+        "table" => {
+            *inside_table.borrow_mut() = true;
+        }
         "tr" => {
-            element.before("| ", Text);
-            element.after(" |\n", Text);
+            insert_newline_after(element);
         }
         "th" => {
-            element.before("**", Text);
-            element.after("** | ", Text);
+            if commonmark {
+                element.before("** ", Html);
+                element.after("** |", Html);
+            } else {
+                element.after("|", Html);
+            }
+
+            // add the first table row start
+            if *inside_table.borrow() {
+                element.before("|", Html);
+                *inside_table.borrow_mut() = false;
+            }
         }
         "td" => {
-            element.after(" | ", Text);
+            element.after("|", Html);
         }
         "iframe" => {
             let _ = handle_iframe(element);
@@ -138,6 +151,46 @@ fn handle_tag(
     Ok(())
 }
 
+/// Replace the markdown chars cleanly.
+fn replace_markdown_chars(input: &str) -> String {
+    use crate::MARKDOWN_MIDDLE_KEYCHARS_SET;
+
+    if !MARKDOWN_MIDDLE_KEYCHARS_SET.is_match(input) {
+        return input.to_string();
+    }
+
+    let mut output = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '&' {
+            let mut entity = String::new();
+            entity.push(ch);
+            while let Some(&next_ch) = chars.peek() {
+                entity.push(next_ch);
+                chars.next();
+                if entity == "&nbsp;" {
+                    entity.clear(); // discard &nbsp;
+                    break;
+                } else if next_ch == ';' || entity.len() > 6 {
+                    output.push_str(&entity);
+                    break;
+                }
+            }
+            if !entity.is_empty() {
+                output.push_str(&entity);
+            }
+        } else if "<>*\\_~".contains(ch) {
+            output.push('\\');
+            output.push(ch);
+        } else {
+            output.push(ch);
+        }
+    }
+
+    output
+}
+
 /// Get the HTML rewriter settings to convert ot markdown.
 pub fn get_rewriter_settings(
     commonmark: bool,
@@ -147,8 +200,9 @@ pub fn get_rewriter_settings(
     let list_type = Rc::new(RefCell::new(None));
     let order_counter = Rc::new(RefCell::new(0));
     let quote_depth = Rc::new(RefCell::new(0));
-
     let quote_depth1 = quote_depth.clone();
+
+    let inside_table = Rc::new(RefCell::new(false));
 
     let mut element_content_handlers =
         Vec::with_capacity(4 + custom.as_ref().map_or(0, |c| c.len()));
@@ -161,9 +215,7 @@ pub fn get_rewriter_settings(
     element_content_handlers.push(text!(
         "*:not(script):not(head):not(style):not(svg)",
         move |el| {
-            *el.as_mut_str() = crate::MARKDOWN_MIDDLE_KEYCHARS
-                .replace_all(el.as_str().trim().into(), "\\$0")
-                .to_string();
+            *el.as_mut_str() = replace_markdown_chars(el.as_str().trim().into());
             Ok(())
         }
     ));
@@ -181,6 +233,7 @@ pub fn get_rewriter_settings(
             list_type.clone(),
             order_counter.clone(),
             quote_depth.clone(),
+            inside_table.clone(),
         );
         Ok(())
     }));
