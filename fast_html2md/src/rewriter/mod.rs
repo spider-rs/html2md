@@ -1,5 +1,6 @@
 pub(crate) mod anchors;
 pub(crate) mod counter;
+pub(crate) mod handle;
 pub(crate) mod iframes;
 pub(crate) mod images;
 pub(crate) mod lists;
