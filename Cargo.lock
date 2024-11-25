@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "fast_html2md"
-version = "0.0.38"
+version = "0.0.39"
 dependencies = [
  "auto_encoder",
  "html5ever",

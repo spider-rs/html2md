@@ -73,8 +73,11 @@ pub fn get_rewriter_settings(
     let quote_depth1 = quote_depth.clone();
     let inside_table = Rc::new(RefCell::new(false));
 
-    let mut element_content_handlers =
-        Vec::with_capacity(4 + custom.as_ref().map_or(0, |c| c.len()));
+    let mut element_content_handlers = Vec::with_capacity(
+        4 + custom
+            .as_ref()
+            .map_or(0, |c| if c.is_empty() { 0 } else { 1 }),
+    );
 
     element_content_handlers.push(text!("blockquote, q, cite", move |el| {
         let _ = rewrite_blockquote_text(el, quote_depth1.clone());
