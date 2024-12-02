@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use html2md::{parse_html, rewrite_html};
+use html2md::{parse_html, rewrite_html, rewrite_html_streaming};
 use std::fs::File;
 use std::io::Read;
 
@@ -23,6 +23,12 @@ pub fn bench_speed(c: &mut Criterion) {
         b.iter(|| black_box(rewrite_html(&html, false)))
     });
 
+    group.bench_function(format!("Async real-world-1: {}", sample_title), |b| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        b.to_async(rt)
+            .iter(|| async { black_box(rewrite_html_streaming(&html, false).await) });
+    });
+
     let path = std::path::Path::new("../test-samples/wiki/en-wikipedia-org_wiki_Cat.html");
 
     let mut html = String::new();
@@ -35,6 +41,12 @@ pub fn bench_speed(c: &mut Criterion) {
 
     group.bench_function(format!("Rewriter wiki-cat: {}", sample_title), |b| {
         b.iter(|| black_box(rewrite_html(&html, false)))
+    });
+
+    group.bench_function(format!("Async Scraper wiki-cat: {}", sample_title), |b| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        b.to_async(rt)
+            .iter(|| async { black_box(rewrite_html_streaming(&html, false).await) });
     });
 
     group.finish();
