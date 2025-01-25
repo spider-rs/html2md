@@ -23,7 +23,7 @@ pub fn bench_speed(c: &mut Criterion) {
         b.iter(|| black_box(rewrite_html(&html, false)))
     });
 
-    group.bench_function(format!("Async real-world-1: {}", sample_title), |b| {
+    group.bench_function(format!("Rewriter(async,streaming) real-world-1: {}", sample_title), |b| {
         let rt = tokio::runtime::Runtime::new().unwrap();
         b.to_async(rt)
             .iter(|| async { black_box(rewrite_html_streaming(&html, false).await) });
@@ -43,7 +43,7 @@ pub fn bench_speed(c: &mut Criterion) {
         b.iter(|| black_box(rewrite_html(&html, false)))
     });
 
-    group.bench_function(format!("Async Scraper wiki-cat: {}", sample_title), |b| {
+    group.bench_function(format!("Rewriter(async,streaming) wiki-cat: {}", sample_title), |b| {
         let rt = tokio::runtime::Runtime::new().unwrap();
         b.to_async(rt)
             .iter(|| async { black_box(rewrite_html_streaming(&html, false).await) });

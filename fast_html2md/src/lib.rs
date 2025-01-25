@@ -1,7 +1,6 @@
 use extended::sifter::{WhitespaceSifter, WhitespaceSifterBytes};
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::collections::HashSet;
 use url::Url;
 
 // we want to just use the rewriter instead for v0.1.
@@ -59,7 +58,7 @@ pub async fn rewrite_html_streaming(html: &str, commonmark: bool) -> String {
 #[cfg(all(feature = "tokio", feature = "rewriter"))]
 pub fn rewrite_html_custom_with_url(
     html: &str,
-    custom: &Option<HashSet<String>>,
+    custom: &Option<std::collections::HashSet<String>>,
     commonmark: bool,
     url: &Option<Url>,
 ) -> String {
@@ -78,7 +77,7 @@ pub fn rewrite_html_custom_with_url(
 #[cfg(all(feature = "tokio", feature = "rewriter"))]
 pub async fn rewrite_html_custom_with_url_and_chunk(
     html: &str,
-    custom: &Option<HashSet<String>>,
+    custom: &Option<std::collections::HashSet<String>>,
     commonmark: bool,
     url: &Option<Url>,
     chunk_size: usize,
@@ -101,7 +100,7 @@ pub async fn rewrite_html_custom_with_url_and_chunk(
 #[cfg(all(feature = "tokio", feature = "rewriter"))]
 pub async fn rewrite_html_custom_with_url_streaming(
     html: &str,
-    custom: &Option<HashSet<String>>,
+    custom: &Option<std::collections::HashSet<String>>,
     commonmark: bool,
     url: &Option<Url>,
 ) -> String {

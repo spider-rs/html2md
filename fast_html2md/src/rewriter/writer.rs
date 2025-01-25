@@ -7,8 +7,7 @@ use lol_html::{doc_comments, doctype, text};
 use lol_html::{element, RewriteStrSettings};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::RwLock;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use url::Url;
 
 /// Get the HTML rewriter settings to convert to markdown.
@@ -209,38 +208,29 @@ pub async fn convert_html_to_markdown_send_with_size(
 ) -> Result<String, Box<dyn std::error::Error>> {
     use tokio_stream::StreamExt;
     let settings = get_rewriter_settings_send(commonmark, custom, url.clone());
-    let (txx, mut rxx) = tokio::sync::mpsc::unbounded_channel();
+
+    let mut rewrited_bytes: Vec<u8> = Vec::new();
 
     let mut rewriter = lol_html::send::HtmlRewriter::new(settings.into(), |c: &[u8]| {
-        let _ = txx.send(c.to_vec());
+        rewrited_bytes.extend_from_slice(&c);
     });
 
     let html_bytes = html.as_bytes();
     let chunks = html_bytes.chunks(chunk_size);
 
-    let mut stream = tokio_stream::iter(chunks).map(Ok::<&[u8], ()>);
+    let mut stream = tokio_stream::iter(chunks);
 
     let mut wrote_error = false;
 
     while let Some(chunk) = stream.next().await {
-        if let Ok(chunk) = chunk {
-            if rewriter.write(chunk).is_err() {
-                wrote_error = true;
-                break;
-            }
+        if rewriter.write(chunk).is_err() {
+            wrote_error = true;
+            break;
         }
     }
 
     if !wrote_error {
         let _ = rewriter.end();
-    }
-
-    drop(txx);
-
-    let mut rewrited_bytes: Vec<u8> = Vec::new();
-
-    while let Some(c) = rxx.recv().await {
-        rewrited_bytes.extend_from_slice(&c);
     }
 
     Ok(clean_markdown_bytes(&rewrited_bytes))
