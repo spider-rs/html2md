@@ -25,7 +25,7 @@ assert_eq!(md, "JAMES");
 
 ### With Async Streaming
 
-For handling large or concurrent workloads, use async streaming. Ensure you have a tokio async runtime:
+For handling large or concurrent workloads, use async streaming with the `stream` and `rewriter` feature. Ensure you have a tokio async runtime:
 
 ```rust
 let md = html2md::rewrite_html_streaming("<p>JAMES</p>", false).await;
@@ -43,8 +43,9 @@ assert_eq!(md, "JAMES");
 
 ## Features
 
-- **Rewriter:** High performance transformation using the `rewriter` feature (default).
-- **Scraper:** Alternative approach for HTML parsing with the `scraper` feature.
+- **rewriter:** High performance transformation using the `rewriter` feature (default).
+- **scraper:** Alternative approach for HTML parsing with the `scraper` feature.
+- **stream:** enables streaming chunks for rewriter.
 
 ### About
 

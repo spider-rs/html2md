@@ -1,6 +1,6 @@
 [package]
 name = "fast_html2md"
-version = "0.0.43"
+version = "0.0.44"
 edition = "2021"
 description = "A fast html2md crate for rust"
 categories = ["development-tools", "parsing", "parser-implementations"]
@@ -11,7 +11,7 @@ repository = "https://github.com/spider-rs/html2md"
 authors = [
     "j-mendez <jeff@spider.cloud>"
 ]
-readme = "README.md"
+readme = "../README.md"
 
 [badges]
 maintenance = { status = "as-is" }
@@ -28,8 +28,7 @@ url = "2"
 markup5ever_rcdom = { version = "0.3.0", optional = true }
 html5ever = { version = "0.27", optional = true }
 lol_html = { version = "2", optional = true }
-tokio = { version = "1", features = ["sync"], optional = true }
-tokio-stream = { version = "0.1", optional = true }
+futures-util = { version = "0.3", optional = true, default-features = false }
 
 [dev-dependencies]
 spectral = "0.6.0"
@@ -41,4 +40,4 @@ tokio = { version = "1", features = ["full"] }
 default = ["rewriter"]
 rewriter = ["dep:lol_html"]
 scraper = ["dep:html5ever", "dep:markup5ever_rcdom"]
-tokio = ["dep:tokio", "dep:tokio-stream"]
+stream = ["dep:futures-util"]

@@ -1,7 +1,6 @@
 use extended::sifter::{WhitespaceSifter, WhitespaceSifterBytes};
 use lazy_static::lazy_static;
 use regex::Regex;
-use url::Url;
 
 // we want to just use the rewriter instead for v0.1.
 pub mod extended;
@@ -40,7 +39,7 @@ pub fn rewrite_html(html: &str, commonmark: bool) -> String {
 /// and returns converted string. Incomplete work in progress for major performance increases.
 /// # Arguments
 /// `html` is source HTML as `String`
-#[cfg(all(feature = "tokio", feature = "rewriter"))]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
 pub async fn rewrite_html_streaming(html: &str, commonmark: bool) -> String {
     rewriter::writer::convert_html_to_markdown_send(html, &None, commonmark, &None)
         .await
@@ -55,12 +54,12 @@ pub async fn rewrite_html_streaming(html: &str, commonmark: bool) -> String {
 /// `custom` is custom tag hadler producers for tags you want, can be empty
 /// `commonmark` is for adjusting markdown output to commonmark
 /// `url` is used to provide absolute url handling
-#[cfg(all(feature = "tokio", feature = "rewriter"))]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
 pub fn rewrite_html_custom_with_url(
     html: &str,
     custom: &Option<std::collections::HashSet<String>>,
     commonmark: bool,
-    url: &Option<Url>,
+    url: &Option<url::Url>,
 ) -> String {
     rewriter::writer::convert_html_to_markdown(html, &custom, commonmark, url).unwrap_or_default()
 }
@@ -74,12 +73,12 @@ pub fn rewrite_html_custom_with_url(
 /// `commonmark` is for adjusting markdown output to commonmark
 /// `url` is used to provide absolute url handling
 /// `chunk_size` the chunk size to use.
-#[cfg(all(feature = "tokio", feature = "rewriter"))]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
 pub async fn rewrite_html_custom_with_url_and_chunk(
     html: &str,
     custom: &Option<std::collections::HashSet<String>>,
     commonmark: bool,
-    url: &Option<Url>,
+    url: &Option<url::Url>,
     chunk_size: usize,
 ) -> String {
     rewriter::writer::convert_html_to_markdown_send_with_size(
@@ -97,12 +96,12 @@ pub async fn rewrite_html_custom_with_url_and_chunk(
 /// `custom` is custom tag hadler producers for tags you want, can be empty
 /// `commonmark` is for adjusting markdown output to commonmark
 /// `url` is used to provide absolute url handling
-#[cfg(all(feature = "tokio", feature = "rewriter"))]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
 pub async fn rewrite_html_custom_with_url_streaming(
     html: &str,
     custom: &Option<std::collections::HashSet<String>>,
     commonmark: bool,
-    url: &Option<Url>,
+    url: &Option<url::Url>,
 ) -> String {
     rewriter::writer::convert_html_to_markdown_send(html, &custom, commonmark, url)
         .await

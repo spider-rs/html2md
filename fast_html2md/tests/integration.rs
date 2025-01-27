@@ -102,7 +102,7 @@ fn test_real_world_wiki_rewriter() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-#[cfg(all(feature = "tokio", feature = "rewriter"))]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
 async fn test_real_world_wiki_async() -> Result<(), Box<dyn std::error::Error>> {
     use std::error::Error;
     use std::fs::{self, File};
@@ -279,7 +279,7 @@ fn test_html_from_text() {
 }
 
 #[test]
-#[cfg(all(feature = "tokio", feature = "rewriter"))]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
 fn test_html_from_text_rewrite() {
     let mut html = Box::new(String::new());
     let mut html_file = File::open("../test-samples/real-world-1.html").unwrap();
@@ -512,7 +512,7 @@ fn test_real_spider() {
 
 #[tokio::test]
 #[ignore]
-#[cfg(all(feature = "tokio", feature = "rewriter"))]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
 async fn test_real_spider_async() {
     let mut html = String::new();
     let mut html_file: File = File::open("../test-samples/spider-cloud.html").unwrap();

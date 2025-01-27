@@ -198,7 +198,7 @@ pub(crate) fn convert_html_to_markdown(
 }
 
 /// Convert to markdown streaming re-writer with chunk size.
-#[cfg(feature = "tokio")]
+#[cfg(feature = "stream")]
 pub async fn convert_html_to_markdown_send_with_size(
     html: &str,
     custom: &Option<std::collections::HashSet<String>>,
@@ -206,7 +206,7 @@ pub async fn convert_html_to_markdown_send_with_size(
     url: &Option<Url>,
     chunk_size: usize,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use tokio_stream::StreamExt;
+    use futures_util::stream::{self, StreamExt};
     let settings = get_rewriter_settings_send(commonmark, custom, url.clone());
 
     let mut rewrited_bytes: Vec<u8> = Vec::new();
@@ -215,12 +215,8 @@ pub async fn convert_html_to_markdown_send_with_size(
         rewrited_bytes.extend_from_slice(&c);
     });
 
-    let html_bytes = html.as_bytes();
-    let chunks = html_bytes.chunks(chunk_size);
-
-    let mut stream = tokio_stream::iter(chunks);
-
     let mut wrote_error = false;
+    let mut stream = stream::iter(html.as_bytes().chunks(chunk_size));
 
     while let Some(chunk) = stream.next().await {
         if rewriter.write(chunk).is_err() {
@@ -237,7 +233,7 @@ pub async fn convert_html_to_markdown_send_with_size(
 }
 
 /// Convert to markdown streaming re-writer
-#[cfg(feature = "tokio")]
+#[cfg(feature = "stream")]
 pub async fn convert_html_to_markdown_send(
     html: &str,
     custom: &Option<std::collections::HashSet<String>>,
