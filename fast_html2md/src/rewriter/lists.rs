@@ -1,10 +1,6 @@
 use super::counter::Counter;
 use lol_html::html_content::ContentType;
 use lol_html::html_content::Element;
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::RwLock;
 
 // Function to handle list elements and items
 #[inline]

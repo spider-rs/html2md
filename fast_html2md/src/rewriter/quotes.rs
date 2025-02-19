@@ -1,21 +1,22 @@
-use crate::rewriter::counter::Counter;
 use lol_html::html_content::{ContentType, Element, TextChunk};
 use std::error::Error;
-use std::sync::{Arc, RwLock};
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 
 // Function to handle <blockquote> elements
 pub(crate) fn rewrite_blockquote_element(
     el: &mut Element,
-    quote_depth: Rc<RefCell<usize>>,
+    quote_depth: Rc<AtomicUsize>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    quote_depth.borrow_mut().increment();
+    quote_depth.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     if let Some(end_tag_handlers) = el.end_tag_handlers() {
         end_tag_handlers.push(Box::new({
             let quote_depth = quote_depth.clone();
             move |_end| {
-                quote_depth.borrow_mut().decrement();
+                quote_depth.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+
                 Ok(())
             }
         }));
@@ -27,19 +28,15 @@ pub(crate) fn rewrite_blockquote_element(
 // Function to handle <blockquote> elements sync
 pub(crate) fn rewrite_blockquote_element_send(
     el: &mut lol_html::send::Element,
-    quote_depth: Arc<RwLock<usize>>,
+    quote_depth: Arc<AtomicUsize>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    if let Ok(mut quote_depth) = quote_depth.write() {
-        quote_depth.increment();
-    }
+    quote_depth.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     if let Some(end_tag_handlers) = el.end_tag_handlers() {
         end_tag_handlers.push(Box::new({
             let quote_depth = quote_depth.clone();
             move |_end| {
-                if let Ok(mut quote_depth) = quote_depth.write() {
-                    quote_depth.decrement();
-                }
+                quote_depth.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                 Ok(())
             }
         }));
@@ -51,9 +48,9 @@ pub(crate) fn rewrite_blockquote_element_send(
 // Function to handle text within <blockquote> elements
 pub(crate) fn rewrite_blockquote_text(
     text_chunk: &mut TextChunk<'_>,
-    quote_depth: Rc<RefCell<usize>>,
+    quote_depth: Rc<AtomicUsize>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let depth = *quote_depth.borrow();
+    let depth = quote_depth.load(std::sync::atomic::Ordering::Relaxed);
     let quote_prefix = "> ".repeat(depth);
     let lines: Vec<&str> = text_chunk.as_str().lines().collect();
     let total_lines = lines.len();
@@ -85,12 +82,9 @@ pub(crate) fn rewrite_blockquote_text(
 // Function to handle text within <blockquote> elements sync
 pub(crate) fn rewrite_blockquote_text_send(
     text_chunk: &mut TextChunk<'_>,
-    quote_depth: Arc<RwLock<usize>>,
+    quote_depth: Arc<AtomicUsize>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let depth = match quote_depth.read() {
-        Ok(d) => *d,
-        _ => 0,
-    };
+    let depth = quote_depth.load(std::sync::atomic::Ordering::Relaxed);
     let quote_prefix = "> ".repeat(depth);
     let lines: Vec<&str> = text_chunk.as_str().lines().collect();
     let total_lines = lines.len();

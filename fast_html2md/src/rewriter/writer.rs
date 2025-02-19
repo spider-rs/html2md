@@ -7,7 +7,8 @@ use lol_html::{doc_comments, doctype, text};
 use lol_html::{element, RewriteStrSettings};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 use url::Url;
 
 /// Get the HTML rewriter settings to convert to markdown.
@@ -18,7 +19,7 @@ pub fn get_rewriter_settings(
 ) -> RewriteStrSettings<'static, 'static> {
     let mut list_type = None;
     let mut order_counter = 0 as usize;
-    let quote_depth = Rc::new(RefCell::new(0));
+    let quote_depth = Rc::new(AtomicUsize::new(0));
     let quote_depth1 = quote_depth.clone();
     let mut inside_table = false;
 
@@ -95,7 +96,7 @@ pub fn get_rewriter_settings_send(
 ) -> lol_html::send::Settings<'static, 'static> {
     let mut list_type = None;
     let mut order_counter = 0 as usize;
-    let quote_depth = Arc::new(RwLock::new(0));
+    let quote_depth = Arc::new(AtomicUsize::new(0));
     let quote_depth1 = quote_depth.clone();
     let mut inside_table = false;
 

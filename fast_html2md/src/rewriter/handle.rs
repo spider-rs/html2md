@@ -10,9 +10,9 @@ use super::{
 };
 use lol_html::html_content::ContentType::{Html, Text};
 use lol_html::html_content::Element;
-use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 use url::Url;
 
 /// Handle the lol_html tag.
@@ -23,7 +23,7 @@ pub fn handle_tag(
     url: &Option<Url>,
     mut list_type: &mut Option<String>,
     order_counter: &mut usize,
-    quote_depth: Rc<RefCell<usize>>,
+    quote_depth: Rc<AtomicUsize>,
     inside_table: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let element_name = element.tag_name();
@@ -148,7 +148,7 @@ pub fn handle_tag_send(
     url: &Option<Url>,
     list_type: &mut Option<String>,
     order_counter: &mut usize,
-    quote_depth: Arc<RwLock<usize>>,
+    quote_depth: Arc<AtomicUsize>,
     inside_table: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let element_name = element.tag_name();
