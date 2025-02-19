@@ -146,10 +146,10 @@ pub fn handle_tag_send(
     element: &mut lol_html::send::Element,
     commonmark: bool,
     url: &Option<Url>,
-    list_type: Arc<RwLock<Option<String>>>,
-    order_counter: Arc<RwLock<usize>>,
+    list_type: &mut Option<String>,
+    order_counter: &mut usize,
     quote_depth: Arc<RwLock<usize>>,
-    inside_table: Arc<RwLock<bool>>,
+    inside_table: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let element_name = element.tag_name();
 
@@ -213,23 +213,14 @@ pub fn handle_tag_send(
         "img" => {
             let _ = rewrite_image_element_send(element, commonmark, &url);
         }
-        "table" => {
-            if let Ok(mut d) = inside_table.write() {
-                *d = true
-            }
-        }
+        "table" => *inside_table = true,
         "tr" => {
             insert_newline_after_send(element);
         }
         "th" => {
-            if let Ok(inside) = inside_table.read() {
-                if *inside {
-                    drop(inside);
-                    element.before("|", Html);
-                    if let Ok(mut d) = inside_table.write() {
-                        *d = false
-                    }
-                }
+            if *inside_table {
+                element.before("|", Html);
+                *inside_table = false
             }
             if commonmark {
                 element.before("** ", Html);
@@ -248,7 +239,7 @@ pub fn handle_tag_send(
             let _ = rewrite_style_element_send(element);
         }
         "ol" | "ul" | "menu" | "li" => {
-            let _ = handle_list_or_item_send(element, list_type.clone(), order_counter.clone());
+            let _ = handle_list_or_item_send(element, list_type, order_counter);
         }
         "q" | "cite" | "blockquote" => {
             let _ = rewrite_blockquote_element_send(element, quote_depth.clone());

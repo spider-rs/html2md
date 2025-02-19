@@ -40,39 +40,25 @@ pub(crate) fn handle_list_or_item(
 #[inline]
 pub(crate) fn handle_list_or_item_send(
     element: &mut lol_html::send::Element,
-    list_type: Arc<RwLock<Option<String>>>,
-    order_counter: Arc<RwLock<usize>>,
+    list_type: &mut Option<String>,
+    order_counter: &mut usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match element.tag_name().as_str() {
         "ul" | "menu" => {
-            if let Ok(mut list_type) = list_type.write() {
-                *list_type = Some("ul".to_string());
-            }
-            if let Ok(mut order_counter) = order_counter.write() {
-                order_counter.reset();
-            }
+            *list_type = Some("ul".to_string());
+
+            order_counter.reset();
         }
         "ol" => {
-            if let Ok(mut list_type) = list_type.write() {
-                *list_type = Some("ol".to_string());
-            }
-            if let Ok(mut order_counter) = order_counter.write() {
-                order_counter.reset();
-            }
+            *list_type = Some("ol".to_string());
+
+            order_counter.reset();
         }
         "li" => {
-            let ordered: bool = if let Ok(list_type) = list_type.read() {
-                list_type.as_deref().eq(&Some("ol"))
-            } else {
-                false
-            };
+            let ordered: bool = list_type.as_deref().eq(&Some("ol"));
 
             if ordered {
-                let order = if let Ok(mut order_counter) = order_counter.write() {
-                    order_counter.increment()
-                } else {
-                    0
-                };
+                let order = order_counter.increment();
 
                 element.before(&format!("\n{}. ", order), ContentType::Text);
             } else {

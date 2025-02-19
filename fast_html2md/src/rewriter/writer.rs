@@ -93,12 +93,11 @@ pub fn get_rewriter_settings_send(
     custom: &Option<std::collections::HashSet<String>>,
     url: Option<Url>,
 ) -> lol_html::send::Settings<'static, 'static> {
-    let list_type = Arc::new(RwLock::new(None::<String>));
-    let order_counter = Arc::new(RwLock::new(0));
+    let mut list_type = None;
+    let mut order_counter = 0 as usize;
     let quote_depth = Arc::new(RwLock::new(0));
-    let inside_table = Arc::new(RwLock::new(false));
-
     let quote_depth1 = quote_depth.clone();
+    let mut inside_table = false;
 
     let mut element_content_handlers = Vec::with_capacity(
         4 + custom
@@ -129,10 +128,10 @@ pub fn get_rewriter_settings_send(
             el,
             commonmark,
             &url,
-            list_type.clone(),
-            order_counter.clone(),
+            &mut list_type,
+            &mut order_counter,
             quote_depth1.clone(),
-            inside_table.clone(),
+            &mut inside_table,
         );
         Ok(())
     }));
