@@ -21,10 +21,10 @@ pub fn handle_tag(
     element: &mut Element,
     commonmark: bool,
     url: &Option<Url>,
-    list_type: Rc<RefCell<Option<String>>>,
-    order_counter: Rc<RefCell<usize>>,
+    mut list_type: &mut Option<String>,
+    order_counter: &mut usize,
     quote_depth: Rc<RefCell<usize>>,
-    inside_table: Rc<RefCell<bool>>,
+    inside_table: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let element_name = element.tag_name();
 
@@ -89,16 +89,16 @@ pub fn handle_tag(
             let _ = rewrite_image_element(element, commonmark, &url);
         }
         "table" => {
-            *inside_table.borrow_mut() = true;
+            *inside_table = true;
         }
         "tr" => {
             insert_newline_after(element);
         }
         "th" => {
             // add the first table row start
-            if *inside_table.borrow() {
+            if *inside_table {
                 element.before("|", Html);
-                *inside_table.borrow_mut() = false;
+                *inside_table = false;
             }
             if commonmark {
                 element.before("** ", Html);
@@ -117,7 +117,7 @@ pub fn handle_tag(
             let _ = rewrite_style_element(element);
         }
         "ol" | "ul" | "menu" | "li" => {
-            let _ = handle_list_or_item(element, list_type.clone(), order_counter.clone());
+            let _ = handle_list_or_item(element, &mut list_type, order_counter);
         }
         "q" | "cite" | "blockquote" => {
             let _ = rewrite_blockquote_element(element, quote_depth);

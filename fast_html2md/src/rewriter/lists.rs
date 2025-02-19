@@ -10,21 +10,21 @@ use std::sync::RwLock;
 #[inline]
 pub(crate) fn handle_list_or_item(
     element: &mut Element,
-    list_type: Rc<RefCell<Option<String>>>,
-    order_counter: Rc<RefCell<usize>>,
+    list_type: &mut Option<String>,
+    order_counter: &mut usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match element.tag_name().as_str() {
         "ul" | "menu" => {
-            *list_type.borrow_mut() = Some("ul".to_string());
-            order_counter.borrow_mut().reset(); // Reset the order counter for a new list
+            *list_type = Some("ul".to_string());
+            order_counter.reset(); // Reset the order counter for a new list
         }
         "ol" => {
-            *list_type.borrow_mut() = Some("ol".to_string());
-            order_counter.borrow_mut().reset();
+            *list_type = Some("ol".to_string());
+            order_counter.reset();
         }
         "li" => {
-            if list_type.borrow().as_deref() == Some("ol") {
-                let order = order_counter.borrow_mut().increment();
+            if list_type.as_deref() == Some("ol") {
+                let order = order_counter.increment();
                 element.before(&format!("\n{}. ", order), ContentType::Text);
             } else {
                 element.before("\n* ", ContentType::Text);

@@ -16,11 +16,11 @@ pub fn get_rewriter_settings(
     custom: &Option<std::collections::HashSet<String>>,
     url: Option<Url>,
 ) -> RewriteStrSettings<'static, 'static> {
-    let list_type = Rc::new(RefCell::new(None));
-    let order_counter = Rc::new(RefCell::new(0));
+    let mut list_type = None;
+    let mut order_counter = 0 as usize;
     let quote_depth = Rc::new(RefCell::new(0));
     let quote_depth1 = quote_depth.clone();
-    let inside_table = Rc::new(RefCell::new(false));
+    let mut inside_table = false;
 
     let mut element_content_handlers = Vec::with_capacity(
         4 + custom
@@ -51,10 +51,10 @@ pub fn get_rewriter_settings(
             el,
             commonmark,
             &url,
-            list_type.clone(),
-            order_counter.clone(),
+            &mut list_type,
+            &mut order_counter,
             quote_depth.clone(),
-            inside_table.clone(),
+            &mut inside_table,
         );
         Ok(())
     }));
