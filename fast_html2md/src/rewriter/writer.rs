@@ -5,11 +5,19 @@ use crate::rewriter::handle::handle_tag_send;
 use crate::rewriter::quotes::rewrite_blockquote_text_send;
 use lol_html::{doc_comments, doctype, text};
 use lol_html::{element, RewriteStrSettings};
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use url::Url;
+
+/// Estimate the size of the markdown.
+fn estimate_markdown(html: &str) -> usize {
+    if html.is_empty() {
+        0
+    } else {
+        (html.len() / 2).max(1)
+    }
+}
 
 /// Get the HTML rewriter settings to convert to markdown.
 pub fn get_rewriter_settings(
@@ -170,7 +178,7 @@ pub(crate) fn rewrite_str<'h, 's, H: lol_html::HandlerTypes>(
     html: &str,
     settings: impl Into<lol_html::Settings<'h, 's, H>>,
 ) -> Result<Vec<u8>, lol_html::errors::RewritingError> {
-    let mut output = vec![];
+    let mut output = Vec::with_capacity(estimate_markdown(html));
 
     let mut rewriter = lol_html::HtmlRewriter::new(settings.into(), |c: &[u8]| {
         output.extend_from_slice(c);
@@ -209,7 +217,7 @@ pub async fn convert_html_to_markdown_send_with_size(
     use futures_util::stream::{self, StreamExt};
     let settings = get_rewriter_settings_send(commonmark, custom, url.clone());
 
-    let mut rewrited_bytes: Vec<u8> = Vec::new();
+    let mut rewrited_bytes: Vec<u8> = Vec::with_capacity(estimate_markdown(html));
 
     let mut rewriter = lol_html::send::HtmlRewriter::new(settings.into(), |c: &[u8]| {
         rewrited_bytes.extend_from_slice(&c);

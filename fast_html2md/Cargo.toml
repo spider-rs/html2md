@@ -1,6 +1,6 @@
 [package]
 name = "fast_html2md"
-version = "0.0.47"
+version = "0.0.48"
 edition = "2021"
 description = "A fast html2md crate for rust"
 categories = ["development-tools", "parsing", "parser-implementations"]
@@ -37,7 +37,7 @@ indoc = "1.0.3"
 tokio = { version = "1", features = ["full"] }
 
 [features]
-default = ["rewriter"]
+default = ["rewriter", "stream"]
 rewriter = ["dep:lol_html"]
 scraper = ["dep:html5ever", "dep:markup5ever_rcdom"]
 stream = ["dep:futures-util"]
