@@ -1,9 +1,11 @@
-use html2md::{parse_html, rewrite_html};
-use pretty_assertions::assert_eq;
+#[cfg(feature = "scraper")]
+pub mod test {
+    use html2md::{parse_html, rewrite_html};
+    use pretty_assertions::assert_eq;
 
-#[test]
-fn test_tables() {
-    let s = r#"<table>
+    #[test]
+    fn test_tables() {
+        let s = r#"<table>
   <thead>
     <tr>
       <th scope='col'>Minor1</th>
@@ -22,21 +24,21 @@ fn test_tables() {
   </tbody>
 </table>"#;
 
-    let md = parse_html(s, false);
+        let md = parse_html(s, false);
 
-    assert_eq!(
-        md,
-        "|Minor1|Minor2|Minor3|Minor4|\n|||||\n| col1 | col2 | col3 | col4 |"
-    );
+        assert_eq!(
+            md,
+            "|Minor1|Minor2|Minor3|Minor4|\n|||||\n| col1 | col2 | col3 | col4 |"
+        );
 
-    let md = rewrite_html(s, false);
+        let md = rewrite_html(s, false);
 
-    assert_eq!(md, "|Minor1|Minor2|Minor3|Minor4|\ncol1|col2|col3|col4|");
-}
+        assert_eq!(md, "|Minor1|Minor2|Minor3|Minor4|\ncol1|col2|col3|col4|");
+    }
 
-#[test]
-fn test_tables_invalid_more_headers() {
-    let s = r#"<table>
+    #[test]
+    fn test_tables_invalid_more_headers() {
+        let s = r#"<table>
   <thead>
     <tr>
       <th scope='col'>Minor1</th>
@@ -57,24 +59,24 @@ fn test_tables_invalid_more_headers() {
   </tbody>
 </table>"#;
 
-    let m =
+        let m =
         "|Minor1|Minor2|Minor3|Minor4|Minor5|Minor6|\n|||||||\n| col1 | col2 | col3 | col4 | | |";
 
-    let md = parse_html(s, false);
+        let md = parse_html(s, false);
 
-    assert_eq!(md, m);
+        assert_eq!(md, m);
 
-    let md = rewrite_html(s, false);
+        let md = rewrite_html(s, false);
 
-    assert_eq!(
-        md,
-        "|Minor1|Minor2|Minor3|Minor4|Minor5|Minor6|\ncol1|col2|col3|col4|"
-    );
-}
+        assert_eq!(
+            md,
+            "|Minor1|Minor2|Minor3|Minor4|Minor5|Minor6|\ncol1|col2|col3|col4|"
+        );
+    }
 
-#[test]
-fn test_tables_invalid_more_rows() {
-    let s = r#"<table>
+    #[test]
+    fn test_tables_invalid_more_rows() {
+        let s = r#"<table>
   <thead>
     <tr>
       <th scope='col'>Minor1</th>
@@ -91,20 +93,20 @@ fn test_tables_invalid_more_rows() {
   </tbody>
 </table>"#;
 
-    let m = "|Minor1|Minor2| | |\n|||||\n| col1 | col2 |col3|col4|";
+        let m = "|Minor1|Minor2| | |\n|||||\n| col1 | col2 |col3|col4|";
 
-    let md = parse_html(s, false);
+        let md = parse_html(s, false);
 
-    assert_eq!(md, m);
+        assert_eq!(md, m);
 
-    let md = rewrite_html(s, false);
+        let md = rewrite_html(s, false);
 
-    assert_eq!(md, "|Minor1|Minor2|\ncol1|col2|col3|col4|");
-}
+        assert_eq!(md, "|Minor1|Minor2|\ncol1|col2|col3|col4|");
+    }
 
-#[test]
-fn test_tables_odd_column_width() {
-    let s = r#"<table>
+    #[test]
+    fn test_tables_odd_column_width() {
+        let s = r#"<table>
   <thead>
     <tr>
       <th scope='col'>Minor</th>
@@ -119,15 +121,15 @@ fn test_tables_odd_column_width() {
   </tbody>
 </table>"#;
 
-    let md = parse_html(s, false);
+        let md = parse_html(s, false);
 
-    assert_eq!(md, "|Minor|Major|\n|||\n|col1 |col2 |");
-}
+        assert_eq!(md, "|Minor|Major|\n|||\n|col1 |col2 |");
+    }
 
-#[test]
-fn test_tables_alignment() {
-    let md = parse_html(
-        r#"<table>
+    #[test]
+    fn test_tables_alignment() {
+        let md = parse_html(
+            r#"<table>
   <thead>
     <tr>
       <th align='right'>Minor1</th>
@@ -145,19 +147,19 @@ fn test_tables_alignment() {
     </tr>
   </tbody>
 </table>"#,
-        false,
-    );
+            false,
+        );
 
-    assert_eq!(
-        md,
-        "|Minor1|Minor2|Minor3|Minor4|\n|||||\n| col1 | col2 | col3 | col4 |"
-    );
-}
+        assert_eq!(
+            md,
+            "|Minor1|Minor2|Minor3|Minor4|\n|||||\n| col1 | col2 | col3 | col4 |"
+        );
+    }
 
-#[test]
-fn test_tables_wild_example() {
-    let md = parse_html(
-        r#"
+    #[test]
+    fn test_tables_wild_example() {
+        let md = parse_html(
+            r#"
 <table style="width: 100%;">
     <thead>
     <tr>
@@ -204,8 +206,9 @@ fn test_tables_wild_example() {
     </tr>
     </tbody>
 </table>"#,
-        false,
-    );
+            false,
+        );
 
-    assert_eq!(md, "| One ring | Patterns | Titanic | | | |\n|||||||\n| One ring to rule them all |There's one for the sorrow| Roll on, Titanic, roll | | | |\n| One ring to find them | And two for the joy |You're the pride of White Star Line| | | |\n| One ring to bring them all | And three for the girls | Roll on, Titanic, roll | | | |\n|And in the darkness bind them| And four for the boys | Into the mists of time | | | |");
+        assert_eq!(md, "| One ring | Patterns | Titanic | | | |\n|||||||\n| One ring to rule them all |There's one for the sorrow| Roll on, Titanic, roll | | | |\n| One ring to find them | And two for the joy |You're the pride of White Star Line| | | |\n| One ring to bring them all | And three for the girls | Roll on, Titanic, roll | | | |\n|And in the darkness bind them| And four for the boys | Into the mists of time | | | |");
+    }
 }

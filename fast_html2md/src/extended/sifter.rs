@@ -152,7 +152,6 @@ fn sift_preallocated(bytes: &[u8], out: &mut String) {
                         is_last_whitespace = false;
                     }
                     out.push(data as char);
-                    is_last_carriage_return = data == CARRIAGE_RETURN;
                 }
                 Character::MultiByte { len } => {
                     extend_from_bytes_with_len(bytes, &mut ind, out, len);

@@ -1,8 +1,7 @@
 use lol_html::html_content::{ContentType, Element, TextChunk};
 use std::error::Error;
 use std::rc::Rc;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicUsize, Arc};
 
 // Function to handle <blockquote> elements
 pub(crate) fn rewrite_blockquote_element(

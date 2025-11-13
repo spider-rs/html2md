@@ -1,8 +1,12 @@
 extern crate spectral;
 
+#[cfg(feature = "scraper")]
 use indoc::indoc;
+#[cfg(feature = "scraper")]
 use spectral::prelude::*;
+#[cfg(feature = "scraper")]
 use std::collections::HashMap;
+
 use std::fs::File;
 use std::io::prelude::*;
 use url::Url;
@@ -498,6 +502,11 @@ Discord LogoDiscord
 Twitter LogoTwitter
 ](https://twitter.com/spider_rust)"#;
 
+const EXAMPLE_RESULT_MD: &str = r###"Example Domain
+# Example Domain
+This domain is for use in documentation examples without needing permission. Avoid use in operations.
+[Learn more](https://iana.org/domains/example)"###;
+
 #[test]
 #[ignore]
 fn test_real_spider() {
@@ -521,4 +530,17 @@ async fn test_real_spider_async() {
         .expect("File must be readable");
     let result = html2md::rewrite_html_streaming(&html, false).await;
     assert!(result == SPIDER_RESULT_MD);
+}
+
+#[tokio::test]
+#[ignore]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+async fn test_real_spider_async_basic() {
+    let mut html = String::new();
+    let mut html_file: File = File::open("../test-samples/example.html").unwrap();
+    html_file
+        .read_to_string(&mut html)
+        .expect("File must be readable");
+    let result = html2md::rewrite_html_streaming(&html, false).await;
+    assert!(result == EXAMPLE_RESULT_MD);
 }

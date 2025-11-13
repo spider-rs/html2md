@@ -8,11 +8,12 @@ use super::{
     insert_newline_after, insert_newline_after_send, insert_newline_before,
     insert_newline_before_send,
 };
-use lol_html::html_content::ContentType::{Html, Text};
-use lol_html::html_content::Element;
+use lol_html::html_content::{
+    ContentType::{Html, Text},
+    Element,
+};
 use std::rc::Rc;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicUsize, Arc};
 use url::Url;
 
 /// Handle the lol_html tag.
@@ -27,9 +28,9 @@ pub fn handle_tag(
     inside_table: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let element_name = element.tag_name();
+    let element_name = element_name.as_str();
 
-    let remove_attrs =
-        commonmark && (element_name.as_str() == "sub" || element_name.as_str() == "sup");
+    let remove_attrs = commonmark && (element_name == "sub" || element_name == "sup");
 
     // check common mark includes.
     if remove_attrs {
@@ -47,7 +48,7 @@ pub fn handle_tag(
     }
 
     // Add the markdown equivalents before the element.
-    match element_name.as_str() {
+    match element_name {
         "h1" => {
             element.before("# ", Text);
             insert_newline_after(element);
@@ -152,9 +153,9 @@ pub fn handle_tag_send(
     inside_table: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let element_name = element.tag_name();
+    let element_name = element_name.as_str();
 
-    let remove_attrs =
-        commonmark && (element_name.as_str() == "sub" || element_name.as_str() == "sup");
+    let remove_attrs = commonmark && (element_name == "sub" || element_name == "sup");
 
     // check common mark includes.
     if remove_attrs {
@@ -172,9 +173,9 @@ pub fn handle_tag_send(
     }
 
     // Add the markdown equivalents before the element.
-    match element_name.as_str() {
+    match element_name {
         "h1" => {
-            element.before("# ", Text);
+            element.before("# ", Html);
             insert_newline_after_send(element);
         }
         "h2" => {

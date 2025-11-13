@@ -1,7 +1,12 @@
-// Counter utility methods
+#[allow(dead_code)]
+
+/// Counter utility methods
 pub trait Counter {
+    /// Reset the counter.
     fn reset(&mut self);
+    /// Increment counter.
     fn increment(&mut self) -> usize;
+    /// Decrement counter [unused].
     fn decrement(&mut self) -> usize;
 }
 

@@ -1,83 +1,86 @@
-use pretty_assertions::assert_eq;
+#[cfg(feature = "scraper")]
+pub mod test {
+    use pretty_assertions::assert_eq;
 
-#[test]
-fn test_image_native_simple() {
-    let md = html2md::parse_html("<img src=\"https://i.redd.it/vesfbmwfkz811.png\" alt=\"image of Linus holding his laptop\" title=\"Daddy Linus\" />", false);
-    assert_eq!(
+    #[test]
+    fn test_image_native_simple() {
+        let md = html2md::parse_html("<img src=\"https://i.redd.it/vesfbmwfkz811.png\" alt=\"image of Linus holding his laptop\" title=\"Daddy Linus\" />", false);
+        assert_eq!(
         md,
         "![image of Linus holding his laptop](https://i.redd.it/vesfbmwfkz811.png \"Daddy Linus\")"
     );
-    let md = html2md::rewrite_html("<img src=\"https://i.redd.it/vesfbmwfkz811.png\" alt=\"image of Linus holding his laptop\" title=\"Daddy Linus\" />", false);
-    assert_eq!(
+        let md = html2md::rewrite_html("<img src=\"https://i.redd.it/vesfbmwfkz811.png\" alt=\"image of Linus holding his laptop\" title=\"Daddy Linus\" />", false);
+        assert_eq!(
         md,
         "![image of Linus holding his laptop](https://i.redd.it/vesfbmwfkz811.png \"Daddy Linus\")"
     )
-}
+    }
 
-#[test]
-fn test_image_native_without_title() {
-    let md = html2md::parse_html("<img src=\"https://i.redd.it/l0ne52x7fh611.png\" alt=\"image of usual kill -9 sequence\" />", false);
-    assert_eq!(
-        md,
-        "![image of usual kill -9 sequence](https://i.redd.it/l0ne52x7fh611.png)"
-    );
-    let md = html2md::rewrite_html("<img src=\"https://i.redd.it/l0ne52x7fh611.png\" alt=\"image of usual kill -9 sequence\" />", false);
-    assert_eq!(
-        md,
-        "![image of usual kill -9 sequence](https://i.redd.it/l0ne52x7fh611.png)"
-    )
-}
+    #[test]
+    fn test_image_native_without_title() {
+        let md = html2md::parse_html("<img src=\"https://i.redd.it/l0ne52x7fh611.png\" alt=\"image of usual kill -9 sequence\" />", false);
+        assert_eq!(
+            md,
+            "![image of usual kill -9 sequence](https://i.redd.it/l0ne52x7fh611.png)"
+        );
+        let md = html2md::rewrite_html("<img src=\"https://i.redd.it/l0ne52x7fh611.png\" alt=\"image of usual kill -9 sequence\" />", false);
+        assert_eq!(
+            md,
+            "![image of usual kill -9 sequence](https://i.redd.it/l0ne52x7fh611.png)"
+        )
+    }
 
-#[test]
-fn test_image_embedded_html() {
-    let md = html2md::parse_html("<img src=\"https://i.redd.it/un4h28uwtp711.png\" alt=\"comics about Mac and GNU/Linux\" title=\"Look at me, brother\" height=\"150\" width=\"150\" />", false);
-    assert_eq!(md, "![comics about Mac and GNU/Linux](https://i.redd.it/un4h28uwtp711.png \"Look at me, brother\")");
-    let md = html2md::rewrite_html("<img src=\"https://i.redd.it/un4h28uwtp711.png\" alt=\"comics about Mac and GNU/Linux\" title=\"Look at me, brother\" height=\"150\" width=\"150\" />", false);
-    assert_eq!(md, "![comics about Mac and GNU/Linux](https://i.redd.it/un4h28uwtp711.png \"Look at me, brother\")")
-}
+    #[test]
+    fn test_image_embedded_html() {
+        let md = html2md::parse_html("<img src=\"https://i.redd.it/un4h28uwtp711.png\" alt=\"comics about Mac and GNU/Linux\" title=\"Look at me, brother\" height=\"150\" width=\"150\" />", false);
+        assert_eq!(md, "![comics about Mac and GNU/Linux](https://i.redd.it/un4h28uwtp711.png \"Look at me, brother\")");
+        let md = html2md::rewrite_html("<img src=\"https://i.redd.it/un4h28uwtp711.png\" alt=\"comics about Mac and GNU/Linux\" title=\"Look at me, brother\" height=\"150\" width=\"150\" />", false);
+        assert_eq!(md, "![comics about Mac and GNU/Linux](https://i.redd.it/un4h28uwtp711.png \"Look at me, brother\")")
+    }
 
-#[test]
-fn test_image_embedded_with_unsupported_html() {
-    // srcset is unsupported in Markdown
-    let md = html2md::parse_html("<img src=\"https://i.redd.it/07onlc10x5711.png\" alt=\"HACKERMAN\" title=\"When you reboot instead of exiting vim\" height=\"150\" width=\"150\" srcset=\"image1 image2\" align=\"center\" />", false);
-    assert_eq!(md, "![HACKERMAN](https://i.redd.it/07onlc10x5711.png \"When you reboot instead of exiting vim\")");
-    // srcset is unsupported in Markdown
-    let md = html2md::rewrite_html("<img src=\"https://i.redd.it/07onlc10x5711.png\" alt=\"HACKERMAN\" title=\"When you reboot instead of exiting vim\" height=\"150\" width=\"150\" srcset=\"image1 image2\" align=\"center\" />", false);
-    assert_eq!(md, "![HACKERMAN](https://i.redd.it/07onlc10x5711.png \"When you reboot instead of exiting vim\")");
-}
+    #[test]
+    fn test_image_embedded_with_unsupported_html() {
+        // srcset is unsupported in Markdown
+        let md = html2md::parse_html("<img src=\"https://i.redd.it/07onlc10x5711.png\" alt=\"HACKERMAN\" title=\"When you reboot instead of exiting vim\" height=\"150\" width=\"150\" srcset=\"image1 image2\" align=\"center\" />", false);
+        assert_eq!(md, "![HACKERMAN](https://i.redd.it/07onlc10x5711.png \"When you reboot instead of exiting vim\")");
+        // srcset is unsupported in Markdown
+        let md = html2md::rewrite_html("<img src=\"https://i.redd.it/07onlc10x5711.png\" alt=\"HACKERMAN\" title=\"When you reboot instead of exiting vim\" height=\"150\" width=\"150\" srcset=\"image1 image2\" align=\"center\" />", false);
+        assert_eq!(md, "![HACKERMAN](https://i.redd.it/07onlc10x5711.png \"When you reboot instead of exiting vim\")");
+    }
 
-#[test]
-fn test_image_src_issue() {
-    let md = html2md::parse_html("<img src=\"https://dybr.ru/img/43/1532265494_android-Kanedias\" width=\"auto\" height=\"500\" >", false);
-    assert_eq!(
-        md,
-        "![](https://dybr.ru/img/43/1532265494_android-Kanedias)"
-    );
-    let md = html2md::rewrite_html("<img src=\"https://dybr.ru/img/43/1532265494_android-Kanedias\" width=\"auto\" height=\"500\" >", false);
-    assert_eq!(
-        md,
-        "![](https://dybr.ru/img/43/1532265494_android-Kanedias)"
-    );
-}
+    #[test]
+    fn test_image_src_issue() {
+        let md = html2md::parse_html("<img src=\"https://dybr.ru/img/43/1532265494_android-Kanedias\" width=\"auto\" height=\"500\" >", false);
+        assert_eq!(
+            md,
+            "![](https://dybr.ru/img/43/1532265494_android-Kanedias)"
+        );
+        let md = html2md::rewrite_html("<img src=\"https://dybr.ru/img/43/1532265494_android-Kanedias\" width=\"auto\" height=\"500\" >", false);
+        assert_eq!(
+            md,
+            "![](https://dybr.ru/img/43/1532265494_android-Kanedias)"
+        );
+    }
 
-#[test]
-fn test_image_with_space_issue() {
-    let md = html2md::parse_html("<img src=\"https://i.redd.it/l0ne 52x7f h611.png\" alt=\"image of usual kill -9 sequence\" />", false);
-    assert_eq!(
-        md,
-        "![image of usual kill -9 sequence](https://i.redd.it/l0ne%2052x7f%20h611.png)"
-    );
-    let md = html2md::rewrite_html("<img src=\"https://i.redd.it/l0ne 52x7f h611.png\" alt=\"image of usual kill -9 sequence\" />", false);
-    assert_eq!(
-        md,
-        "![image of usual kill -9 sequence](https://i.redd.it/l0ne%2052x7f%20h611.png)"
-    );
-}
+    #[test]
+    fn test_image_with_space_issue() {
+        let md = html2md::parse_html("<img src=\"https://i.redd.it/l0ne 52x7f h611.png\" alt=\"image of usual kill -9 sequence\" />", false);
+        assert_eq!(
+            md,
+            "![image of usual kill -9 sequence](https://i.redd.it/l0ne%2052x7f%20h611.png)"
+        );
+        let md = html2md::rewrite_html("<img src=\"https://i.redd.it/l0ne 52x7f h611.png\" alt=\"image of usual kill -9 sequence\" />", false);
+        assert_eq!(
+            md,
+            "![image of usual kill -9 sequence](https://i.redd.it/l0ne%2052x7f%20h611.png)"
+        );
+    }
 
-#[test]
-fn test_image_with_query_issue() {
-    let md = html2md::parse_html("<img src=\"https://instagram.ftll1-1.fna.fbcdn.net/vp/4c753762a3cd58ec2cd55f7e20f87e5c/5D39A8B3/t51.2885-15/sh0.08/e35/p640x640/54511922_267736260775264_8482507773977053160_n.jpg?_nc_ht=instagram.ftll1-1.fna.fbcdn.net\" style=\"width: 494px;\">", false);
-    assert_eq!(md, "![](https://instagram.ftll1-1.fna.fbcdn.net/vp/4c753762a3cd58ec2cd55f7e20f87e5c/5D39A8B3/t51.2885-15/sh0.08/e35/p640x640/54511922_267736260775264_8482507773977053160_n.jpg?_nc_ht=instagram.ftll1-1.fna.fbcdn.net)");
-    let md = html2md::rewrite_html("<img src=\"https://instagram.ftll1-1.fna.fbcdn.net/vp/4c753762a3cd58ec2cd55f7e20f87e5c/5D39A8B3/t51.2885-15/sh0.08/e35/p640x640/54511922_267736260775264_8482507773977053160_n.jpg?_nc_ht=instagram.ftll1-1.fna.fbcdn.net\" style=\"width: 494px;\">", false);
-    assert_eq!(md, "![](https://instagram.ftll1-1.fna.fbcdn.net/vp/4c753762a3cd58ec2cd55f7e20f87e5c/5D39A8B3/t51.2885-15/sh0.08/e35/p640x640/54511922_267736260775264_8482507773977053160_n.jpg?_nc_ht=instagram.ftll1-1.fna.fbcdn.net)");
+    #[test]
+    fn test_image_with_query_issue() {
+        let md = html2md::parse_html("<img src=\"https://instagram.ftll1-1.fna.fbcdn.net/vp/4c753762a3cd58ec2cd55f7e20f87e5c/5D39A8B3/t51.2885-15/sh0.08/e35/p640x640/54511922_267736260775264_8482507773977053160_n.jpg?_nc_ht=instagram.ftll1-1.fna.fbcdn.net\" style=\"width: 494px;\">", false);
+        assert_eq!(md, "![](https://instagram.ftll1-1.fna.fbcdn.net/vp/4c753762a3cd58ec2cd55f7e20f87e5c/5D39A8B3/t51.2885-15/sh0.08/e35/p640x640/54511922_267736260775264_8482507773977053160_n.jpg?_nc_ht=instagram.ftll1-1.fna.fbcdn.net)");
+        let md = html2md::rewrite_html("<img src=\"https://instagram.ftll1-1.fna.fbcdn.net/vp/4c753762a3cd58ec2cd55f7e20f87e5c/5D39A8B3/t51.2885-15/sh0.08/e35/p640x640/54511922_267736260775264_8482507773977053160_n.jpg?_nc_ht=instagram.ftll1-1.fna.fbcdn.net\" style=\"width: 494px;\">", false);
+        assert_eq!(md, "![](https://instagram.ftll1-1.fna.fbcdn.net/vp/4c753762a3cd58ec2cd55f7e20f87e5c/5D39A8B3/t51.2885-15/sh0.08/e35/p640x640/54511922_267736260775264_8482507773977053160_n.jpg?_nc_ht=instagram.ftll1-1.fna.fbcdn.net)");
+    }
 }
