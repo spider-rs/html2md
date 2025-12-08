@@ -7,6 +7,12 @@ use std::rc::Rc;
 use std::sync::{atomic::AtomicUsize, Arc};
 use url::Url;
 
+lazy_static::lazy_static! {
+    #[cfg(feature = "ignore_cookies")]
+    /// Cookie banner patterns.
+    static ref COOKIE_BANNER_SELECTOR: &'static str = "body > #onetrust-banner-sdk,#didomi-host,#qc-cmp2-container,#cookie-banner,#__rptl-cookiebanner";
+}
+
 /// End tag handler type sync send.
 type EndHandler = Box<
     dyn for<'b> FnOnce(
@@ -49,8 +55,26 @@ pub fn get_rewriter_settings(
     let mut element_content_handlers = Vec::with_capacity(
         4 + custom
             .as_ref()
-            .map_or(0, |c| if c.is_empty() { 0 } else { 1 }),
+            .map_or(0, |c| if c.is_empty() { 0 } else { 1 })
+            + {
+                #[cfg(feature = "ignore_cookies")]
+                {
+                    1
+                }
+                #[cfg(not(feature = "ignore_cookies"))]
+                {
+                    0
+                }
+            },
     );
+
+    #[cfg(feature = "ignore_cookies")]
+    {
+        element_content_handlers.push(lol_html::element!(COOKIE_BANNER_SELECTOR, |el| {
+            el.remove();
+            Ok(())
+        }));
+    }
 
     element_content_handlers.push(text!("blockquote, q, cite", move |el| {
         let _ = rewrite_blockquote_text(el, quote_depth1.clone());
@@ -150,8 +174,26 @@ pub fn get_rewriter_settings_send(
     let mut element_content_handlers = Vec::with_capacity(
         4 + custom
             .as_ref()
-            .map_or(0, |c| if c.is_empty() { 0 } else { 1 }),
+            .map_or(0, |c| if c.is_empty() { 0 } else { 1 })
+            + {
+                #[cfg(feature = "ignore_cookies")]
+                {
+                    1
+                }
+                #[cfg(not(feature = "ignore_cookies"))]
+                {
+                    0
+                }
+            },
     );
+
+    #[cfg(feature = "ignore_cookies")]
+    {
+        element_content_handlers.push(lol_html::element!(COOKIE_BANNER_SELECTOR, |el| {
+            el.remove();
+            Ok(())
+        }));
+    }
 
     element_content_handlers.push(text!("blockquote, q, cite", move |el| {
         let _ = rewrite_blockquote_text_send(el, quote_depth.clone());
