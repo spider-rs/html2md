@@ -46,7 +46,7 @@ pub mod test {
         <p>Than are dreamt of in your philosophy</p>
     </details>
     "};
-        let m = "There are more things in heaven and Earth,**Horatio**\nThan are dreamt of in your philosophy";
+        let m = "There are more things in heaven and Earth, **Horatio**\nThan are dreamt of in your philosophy";
         let md = parse_html(html, false);
         assert_eq!(md, m);
         let md = rewrite_html(html, false);

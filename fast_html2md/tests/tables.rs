@@ -33,7 +33,7 @@ pub mod test {
 
         let md = rewrite_html(s, false);
 
-        assert_eq!(md, "|Minor1|Minor2|Minor3|Minor4|\ncol1|col2|col3|col4|");
+        assert_eq!(md, "|Minor1|Minor2|Minor3|Minor4|\n|col1|col2|col3|col4|");
     }
 
     #[test]
@@ -70,7 +70,7 @@ pub mod test {
 
         assert_eq!(
             md,
-            "|Minor1|Minor2|Minor3|Minor4|Minor5|Minor6|\ncol1|col2|col3|col4|"
+            "|Minor1|Minor2|Minor3|Minor4|Minor5|Minor6|\n|col1|col2|col3|col4|"
         );
     }
 
@@ -101,7 +101,7 @@ pub mod test {
 
         let md = rewrite_html(s, false);
 
-        assert_eq!(md, "|Minor1|Minor2|\ncol1|col2|col3|col4|");
+        assert_eq!(md, "|Minor1|Minor2|\n|col1|col2|col3|col4|");
     }
 
     #[test]

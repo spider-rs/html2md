@@ -1,7 +1,6 @@
 use auto_encoder::auto_encode_bytes;
-use std::str;
 
-/// Charector handling bytes.
+/// Character handling bytes.
 enum Character {
     SingleByte { data: u8 },
     MultiByte { len: usize },
@@ -9,9 +8,8 @@ enum Character {
 
 /// A trait containing all `string` whitespace-sifting functions.
 pub trait WhitespaceSifter: AsRef<str> {
-    /// This removes duplicate [whitespaces](https://doc.rust-lang.org/reference/whitespace.html) from a `string` implementing `AsRef<str>`.
-    /// This follows the [is_ascii_whitespace](https://doc.rust-lang.org/std/primitive.char.html#method.is_ascii_whitespace) implementation.
-    /// This treats carriage-returns as just one `char` in the `string`.
+    /// Removes duplicate ASCII whitespaces (collapses runs).
+    /// NOTE: This mode does NOT preserve newlines.
     #[must_use]
     fn sift(&self) -> String {
         let input: &str = self.as_ref();
@@ -20,10 +18,11 @@ pub trait WhitespaceSifter: AsRef<str> {
         out
     }
 
-    /// This removes duplicate [whitespaces](https://doc.rust-lang.org/reference/whitespace.html) from a `string` implementing `AsRef<str>`.
-    /// This follows the [is_ascii_whitespace](https://doc.rust-lang.org/std/primitive.char.html#method.is_ascii_whitespace) implementation.
-    /// This preserves deduplicated newlines.
-    /// This treats carriage-returns as just one `char` in the `string`.
+    /// Removes duplicate ASCII whitespaces but preserves deduplicated newlines,
+    /// trims spaces before newlines, and applies markdown post-fixes:
+    /// - join bare list markers: "*\nText" -> "* Text", "1.\nText" -> "1. Text"
+    /// - join table cell fragments: "|A|\nB|\nC|" -> "|A|B|C|"
+    /// - ensure table rows start with '|': "a|b|c|" -> "|a|b|c|"
     #[must_use]
     fn sift_preserve_newlines(&self) -> String {
         let input = self.as_ref();
@@ -35,6 +34,7 @@ pub trait WhitespaceSifter: AsRef<str> {
             sift_preallocated_until_newline(bytes, &mut ind, &mut out);
         }
 
+        // Drop trailing newline(s)
         if out.ends_with("\r\n") {
             let _ = out.pop();
             let _ = out.pop();
@@ -48,8 +48,7 @@ pub trait WhitespaceSifter: AsRef<str> {
 
 /// A trait containing all `Vec<u8>` whitespace-sifting functions.
 pub trait WhitespaceSifterBytes: AsRef<[u8]> {
-    /// This removes duplicate whitespaces from a `Vec<u8>`.
-    /// It supports the same whitespace definition as [char::is_ascii_whitespace].
+    /// Removes duplicate ASCII whitespaces (collapses runs).
     #[must_use]
     fn sift_bytes(&self) -> String {
         let input = self.as_ref();
@@ -58,8 +57,11 @@ pub trait WhitespaceSifterBytes: AsRef<[u8]> {
         out
     }
 
-    /// This removes duplicate whitespaces from a `Vec<u8>`.
-    /// It preserves deduplicated newlines.
+    /// Removes duplicate ASCII whitespaces but preserves deduplicated newlines,
+    /// trims spaces before newlines, and applies markdown post-fixes:
+    /// - join bare list markers: "*\nText" -> "* Text", "1.\nText" -> "1. Text"
+    /// - join table cell fragments: "|A|\nB|\nC|" -> "|A|B|C|"
+    /// - ensure table rows start with '|': "a|b|c|" -> "|a|b|c|"
     #[must_use]
     fn sift_bytes_preserve_newlines(&self) -> String {
         let bytes = self.as_ref();
@@ -70,6 +72,7 @@ pub trait WhitespaceSifterBytes: AsRef<[u8]> {
             sift_preallocated_until_newline(bytes, &mut ind, &mut out);
         }
 
+        // Drop trailing newline(s)
         if out.ends_with("\r\n") {
             let _ = out.pop();
             let _ = out.pop();
@@ -84,7 +87,7 @@ pub trait WhitespaceSifterBytes: AsRef<[u8]> {
 impl<T: AsRef<str>> WhitespaceSifter for T {}
 impl<T: AsRef<[u8]>> WhitespaceSifterBytes for T {}
 
-/// A custom implementation of `str::trim_start`.
+/// A custom implementation of `str::trim_start` (ASCII whitespace only).
 fn sift_trim_start(bytes: &[u8], ind: &mut usize, out: &mut String) {
     while *ind < bytes.len() {
         match get_char_metadata(bytes[*ind]) {
@@ -96,29 +99,58 @@ fn sift_trim_start(bytes: &[u8], ind: &mut usize, out: &mut String) {
                 }
             }
             Character::MultiByte { len } => {
-                extend_from_bytes_with_len(bytes, ind, out, len);
+                // Multi-byte char is not ASCII whitespace; emit and stop trimming.
+                let _ = extend_from_bytes_with_len(bytes, ind, out, len);
                 break;
             }
         }
     }
 }
 
-/// A custom implementation for `str::trim_end`.
+/// A custom implementation for `str::trim_end` (removes one trailing ASCII space if pending).
 fn sift_trim_end(out: &mut String, is_last_whitespace: bool) {
     if is_last_whitespace {
         out.pop();
     }
 }
 
-/// Extend the bytes from a slice.
-fn extend_from_bytes_with_len(bytes: &[u8], ind: &mut usize, out: &mut String, len: usize) {
+/// Extend bytes for a multibyte UTF-8 sequence.
+/// Returns `true` if the sequence was normalized as whitespace (e.g., NBSP -> ' ').
+#[inline]
+fn extend_from_bytes_with_len(bytes: &[u8], ind: &mut usize, out: &mut String, len: usize) -> bool {
     let end = ind.saturating_add(len);
-    // Check bounds to ensure we don't run into an out-of-bounds error.
+
     if *ind <= end && end <= bytes.len() {
-        let output = auto_encode_bytes(&bytes[*ind..end]);
+        let slice = &bytes[*ind..end];
+
+        // Normalize common Unicode "space-like" sequences to ASCII space.
+        // NBSP U+00A0: C2 A0
+        if slice == [0xC2, 0xA0] {
+            out.push(' ');
+            *ind = end;
+            return true;
+        }
+
+        // Narrow NBSP U+202F: E2 80 AF
+        if slice == [0xE2, 0x80, 0xAF] {
+            out.push(' ');
+            *ind = end;
+            return true;
+        }
+
+        // Thin space U+2009: E2 80 89
+        if slice == [0xE2, 0x80, 0x89] {
+            out.push(' ');
+            *ind = end;
+            return true;
+        }
+
+        let output = auto_encode_bytes(slice);
         out.push_str(&output);
     }
+
     *ind = end;
+    false
 }
 
 #[inline]
@@ -126,48 +158,58 @@ const fn is_newline(codepoint: u8) -> bool {
     matches!(codepoint, LINE_FEED | CARRIAGE_RETURN)
 }
 
-/// Sift preallocate safe strings.
+/// Sift preallocated safe strings (collapses ASCII whitespace runs).
 fn sift_preallocated(bytes: &[u8], out: &mut String) {
-    if !bytes.is_empty() {
-        let mut ind: usize = 0;
-        sift_trim_start(bytes, &mut ind, out);
-        let mut is_last_whitespace: bool = false;
-        let mut is_last_carriage_return: bool = false;
+    if bytes.is_empty() {
+        return;
+    }
 
-        while ind < bytes.len() {
-            match get_char_metadata(bytes[ind]) {
-                Character::SingleByte { data } => {
-                    ind += 1;
-                    if is_ascii_whitespace(data) {
-                        if data == LINE_FEED && is_last_carriage_return {
-                            out.push('\n');
-                            is_last_carriage_return = false;
-                            continue;
-                        }
-                        if is_last_whitespace {
-                            continue;
-                        }
-                        is_last_whitespace = true;
-                        is_last_carriage_return = data == CARRIAGE_RETURN;
-                    } else {
-                        is_last_whitespace = false;
+    let mut ind: usize = 0;
+    sift_trim_start(bytes, &mut ind, out);
+
+    let mut is_last_whitespace: bool = false;
+    let mut is_last_carriage_return: bool = false;
+
+    while ind < bytes.len() {
+        match get_char_metadata(bytes[ind]) {
+            Character::SingleByte { data } => {
+                ind += 1;
+
+                if is_ascii_whitespace(data) {
+                    // CRLF special-case (legacy)
+                    if data == LINE_FEED && is_last_carriage_return {
+                        out.push('\n');
                         is_last_carriage_return = false;
+                        is_last_whitespace = false;
+                        continue;
                     }
+
+                    if is_last_whitespace {
+                        is_last_carriage_return = data == CARRIAGE_RETURN;
+                        continue;
+                    }
+
+                    is_last_whitespace = true;
+                    is_last_carriage_return = data == CARRIAGE_RETURN;
                     out.push(data as char);
-                }
-                Character::MultiByte { len } => {
-                    extend_from_bytes_with_len(bytes, &mut ind, out, len);
+                } else {
                     is_last_whitespace = false;
                     is_last_carriage_return = false;
+                    out.push(data as char);
                 }
             }
+            Character::MultiByte { len } => {
+                let was_ws = extend_from_bytes_with_len(bytes, &mut ind, out, len);
+                is_last_whitespace = was_ws;
+                is_last_carriage_return = false;
+            }
         }
-
-        sift_trim_end(out, is_last_whitespace);
     }
+
+    sift_trim_end(out, is_last_whitespace);
 }
 
-/// Sift preallocate until complete.
+/// Sift preallocated until newline (preserves deduped newlines and trims spaces before them).
 fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut String) {
     sift_trim_start(bytes, ind, out);
 
@@ -178,28 +220,38 @@ fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut Stri
         match get_char_metadata(bytes[*ind]) {
             Character::SingleByte { data } => {
                 *ind += 1;
+
                 if is_ascii_whitespace(data) {
                     if is_newline(data) {
+                        // Drop trailing ASCII space before newline (fixes " \n").
+                        if is_last_whitespace {
+                            out.pop();
+                            is_last_whitespace = false;
+                        }
+
                         if is_last_carriage_return {
                             out.push('\r');
                         }
                         out.push('\n');
                         return;
                     }
+
                     is_last_carriage_return = data == CARRIAGE_RETURN;
+
                     if is_last_whitespace {
                         continue;
                     }
                     is_last_whitespace = true;
+                    out.push(' ');
                 } else {
                     is_last_whitespace = false;
                     is_last_carriage_return = false;
+                    out.push(data as char);
                 }
-                out.push(data as char);
             }
             Character::MultiByte { len } => {
-                extend_from_bytes_with_len(bytes, ind, out, len);
-                is_last_whitespace = false;
+                let was_ws = extend_from_bytes_with_len(bytes, ind, out, len);
+                is_last_whitespace = was_ws;
                 is_last_carriage_return = false;
             }
         }
@@ -208,7 +260,7 @@ fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut Stri
     sift_trim_end(out, is_last_whitespace);
 }
 
-/// Binary extracted from [std](https://doc.rust-lang.org/src/core/str/validations.rs.html#36).
+/// Binary extracted from `std`.
 #[inline]
 const fn get_char_metadata(first_byte: u8) -> Character {
     match first_byte {
@@ -230,7 +282,7 @@ const FORM_FEED: u8 = '\x0C' as u32 as u8;
 #[allow(clippy::cast_possible_truncation)]
 const CARRIAGE_RETURN: u8 = '\r' as u32 as u8;
 
-/// Values extracted from [std](https://doc.rust-lang.org/src/core/char/methods.rs.html#1680).
+/// ASCII whitespace definition (matches `char::is_ascii_whitespace`).
 #[inline]
 const fn is_ascii_whitespace(codepoint: u8) -> bool {
     matches!(

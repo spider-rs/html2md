@@ -112,14 +112,14 @@ pub async fn rewrite_html_custom_with_url_streaming(
 ///
 /// Clears excessive punctuation that would be trimmed by renderer anyway
 pub fn clean_markdown(input: &str) -> String {
-    input.sift()
+    input.sift_preserve_newlines()
 }
 
 /// Called after all processing has been finished
 ///
 /// Clears excessive punctuation that would be trimmed by renderer anyway
 pub fn clean_markdown_bytes(input: &Vec<u8>) -> String {
-    input.sift_bytes()
+    input.sift_bytes_preserve_newlines()
 }
 
 /// Replace the markdown chars cleanly.

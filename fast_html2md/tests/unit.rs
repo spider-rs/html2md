@@ -139,7 +139,7 @@ pub mod test {
         );
         assert_eq!(
             md,
-            "# MARC-FS\n[Mail.ru](http://Mail.ru)Cloud filesystem written for FUSE\n## Synopsis"
+            "# MARC-FS\n[Mail.ru](http://Mail.ru) Cloud filesystem written for FUSE\n## Synopsis"
         )
     }
 
@@ -176,6 +176,6 @@ pub mod test {
             r#"<p>This is NOT a header!<br/><sup>something</sup>     -------</p>"#,
             false,
         );
-        assert_eq!(md, "This is NOT a header!\nsomething-------")
+        assert_eq!(md, "This is NOT a header!\nsomething -------")
     }
 }

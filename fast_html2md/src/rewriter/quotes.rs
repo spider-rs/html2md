@@ -34,7 +34,7 @@ pub(crate) fn rewrite_blockquote_element_send(
     if let Some(end_tag_handlers) = el.end_tag_handlers() {
         end_tag_handlers.push(Box::new({
             let quote_depth = quote_depth.clone();
-            move |_end| {
+            move |_end: &mut lol_html::html_content::EndTag<'_>| {
                 quote_depth.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
                 Ok(())
             }
