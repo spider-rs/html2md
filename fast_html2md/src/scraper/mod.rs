@@ -224,9 +224,9 @@ pub fn walk(
 
                 let minified_text = EXCESSIVE_WHITESPACE_PATTERN.replace_all(&text, " ");
 
-                result.append_str(minified_text.trim());
+                result.append_str(&minified_text);
             } else {
-                result.append_str(text.trim());
+                result.append_str(&text);
             }
         }
         NodeData::Element { ref name, .. } => {

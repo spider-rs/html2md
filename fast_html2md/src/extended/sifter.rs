@@ -148,17 +148,21 @@ fn sift_preallocated(bytes: &[u8], out: &mut String) {
                             continue;
                         }
                         is_last_whitespace = true;
+                        is_last_carriage_return = data == CARRIAGE_RETURN;
                     } else {
                         is_last_whitespace = false;
+                        is_last_carriage_return = false;
                     }
                     out.push(data as char);
                 }
                 Character::MultiByte { len } => {
                     extend_from_bytes_with_len(bytes, &mut ind, out, len);
+                    is_last_whitespace = false;
+                    is_last_carriage_return = false;
                 }
             }
-            is_last_carriage_return = false;
         }
+
         sift_trim_end(out, is_last_whitespace);
     }
 }
@@ -189,15 +193,18 @@ fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut Stri
                     is_last_whitespace = true;
                 } else {
                     is_last_whitespace = false;
+                    is_last_carriage_return = false;
                 }
                 out.push(data as char);
             }
             Character::MultiByte { len } => {
                 extend_from_bytes_with_len(bytes, ind, out, len);
+                is_last_whitespace = false;
+                is_last_carriage_return = false;
             }
         }
-        is_last_carriage_return = false;
     }
+
     sift_trim_end(out, is_last_whitespace);
 }
 

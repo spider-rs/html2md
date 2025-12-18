@@ -84,7 +84,7 @@ pub fn get_rewriter_settings(
     element_content_handlers.push(text!(
         "*:not(script):not(head):not(style):not(svg)",
         move |el| {
-            *el.as_mut_str() = crate::replace_markdown_chars(el.as_str().trim().into());
+            *el.as_mut_str() = crate::replace_markdown_chars(el.as_str().into());
             Ok(())
         }
     ));
@@ -203,7 +203,7 @@ pub fn get_rewriter_settings_send(
     element_content_handlers.push(text!(
         "*:not(script):not(head):not(style):not(svg)",
         move |el| {
-            *el.as_mut_str() = crate::replace_markdown_chars(el.as_str().trim().into());
+            *el.as_mut_str() = crate::replace_markdown_chars(el.as_str().into());
             Ok(())
         }
     ));
