@@ -1,8 +1,45 @@
 use lol_html::html_content::Element;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
+use std::borrow::Cow;
 use url::Url;
 
 const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
+
+/// Build markdown image syntax efficiently.
+#[inline]
+fn build_image_markdown(alt: &str, url: &str, title: &str) -> String {
+    if title.is_empty() {
+        // ![alt](url)
+        let mut s = String::with_capacity(alt.len() + url.len() + 5);
+        s.push_str("![");
+        s.push_str(alt);
+        s.push_str("](");
+        s.push_str(url);
+        s.push(')');
+        s
+    } else {
+        // ![alt](url "title")
+        let mut s = String::with_capacity(alt.len() + url.len() + title.len() + 8);
+        s.push_str("![");
+        s.push_str(alt);
+        s.push_str("](");
+        s.push_str(url);
+        s.push_str(" \"");
+        s.push_str(title);
+        s.push_str("\")");
+        s
+    }
+}
+
+/// Push attribute to HTML string efficiently.
+#[inline]
+fn push_attr(s: &mut String, name: &str, value: &str) {
+    s.push(' ');
+    s.push_str(name);
+    s.push_str("=\"");
+    s.push_str(value);
+    s.push('"');
+}
 
 /// Rewrite the image.
 pub(crate) fn rewrite_image_element(
@@ -12,59 +49,55 @@ pub(crate) fn rewrite_image_element(
 ) -> Result<(), std::io::Error> {
     let src = el.get_attribute("src").unwrap_or_default();
     let alt = el.get_attribute("alt").unwrap_or_default();
-    let title = el.get_attribute("title").unwrap_or_else(|| "".to_string());
+    let title = el.get_attribute("title").unwrap_or_default();
 
     let height = el.get_attribute("height");
     let width = el.get_attribute("width");
     let align = el.get_attribute("align");
 
     if commonmark && (height.is_some() || width.is_some() || align.is_some()) {
-        let mut img_tag = format!("<img src=\"{}\"", src);
+        let mut img_tag = String::with_capacity(src.len() + 64);
+        img_tag.push_str("<img src=\"");
+        img_tag.push_str(&src);
+        img_tag.push('"');
 
-        if let Some(alt) = el.get_attribute("alt") {
-            img_tag.push_str(&format!(" alt=\"{}\"", alt));
+        if !alt.is_empty() {
+            push_attr(&mut img_tag, "alt", &alt);
         }
-        if let Some(title) = el.get_attribute("title") {
-            img_tag.push_str(&format!(" title=\"{}\"", title));
+        if !title.is_empty() {
+            push_attr(&mut img_tag, "title", &title);
         }
-        if let Some(height) = height {
-            img_tag.push_str(&format!(" height=\"{}\"", height));
+        if let Some(ref h) = height {
+            push_attr(&mut img_tag, "height", h);
         }
-        if let Some(width) = width {
-            img_tag.push_str(&format!(" width=\"{}\"", width));
+        if let Some(ref w) = width {
+            push_attr(&mut img_tag, "width", w);
         }
-        if let Some(align) = align {
-            img_tag.push_str(&format!(" align=\"{}\"", align));
+        if let Some(ref a) = align {
+            push_attr(&mut img_tag, "align", a);
         }
 
         img_tag.push_str(" />");
         el.set_inner_content(&img_tag, lol_html::html_content::ContentType::Html);
     } else {
-        let mut img_url = if src.contains(' ') {
-            utf8_percent_encode(&src, FRAGMENT).to_string()
+        let img_url: Cow<str> = if src.contains(' ') {
+            Cow::Owned(utf8_percent_encode(&src, FRAGMENT).to_string())
+        } else if src.starts_with('/') {
+            if let Some(ref u) = url {
+                if let Ok(n) = u.join(&src) {
+                    Cow::Owned(n.to_string())
+                } else {
+                    Cow::Borrowed(&src)
+                }
+            } else {
+                Cow::Borrowed(&src)
+            }
         } else {
-            src.clone()
+            Cow::Borrowed(&src)
         };
 
-        if img_url.starts_with('/') {
-            if let Some(ref u) = url {
-                if let Ok(n) = u.join(&img_url) {
-                    img_url = n.to_string();
-                }
-            }
-        }
-
         el.replace(
-            &format!(
-                "![{}]({}{})",
-                alt,
-                img_url,
-                if !title.is_empty() {
-                    format!(" \"{}\"", title)
-                } else {
-                    "".to_string()
-                }
-            ),
+            &build_image_markdown(&alt, &img_url, &title),
             lol_html::html_content::ContentType::Html,
         );
     }
@@ -80,59 +113,55 @@ pub(crate) fn rewrite_image_element_send(
 ) -> Result<(), std::io::Error> {
     let src = el.get_attribute("src").unwrap_or_default();
     let alt = el.get_attribute("alt").unwrap_or_default();
-    let title = el.get_attribute("title").unwrap_or_else(|| "".to_string());
+    let title = el.get_attribute("title").unwrap_or_default();
 
     let height = el.get_attribute("height");
     let width = el.get_attribute("width");
     let align = el.get_attribute("align");
 
     if commonmark && (height.is_some() || width.is_some() || align.is_some()) {
-        let mut img_tag = format!("<img src=\"{}\"", src);
+        let mut img_tag = String::with_capacity(src.len() + 64);
+        img_tag.push_str("<img src=\"");
+        img_tag.push_str(&src);
+        img_tag.push('"');
 
-        if let Some(alt) = el.get_attribute("alt") {
-            img_tag.push_str(&format!(" alt=\"{}\"", alt));
+        if !alt.is_empty() {
+            push_attr(&mut img_tag, "alt", &alt);
         }
-        if let Some(title) = el.get_attribute("title") {
-            img_tag.push_str(&format!(" title=\"{}\"", title));
+        if !title.is_empty() {
+            push_attr(&mut img_tag, "title", &title);
         }
-        if let Some(height) = height {
-            img_tag.push_str(&format!(" height=\"{}\"", height));
+        if let Some(ref h) = height {
+            push_attr(&mut img_tag, "height", h);
         }
-        if let Some(width) = width {
-            img_tag.push_str(&format!(" width=\"{}\"", width));
+        if let Some(ref w) = width {
+            push_attr(&mut img_tag, "width", w);
         }
-        if let Some(align) = align {
-            img_tag.push_str(&format!(" align=\"{}\"", align));
+        if let Some(ref a) = align {
+            push_attr(&mut img_tag, "align", a);
         }
 
         img_tag.push_str(" />");
         el.set_inner_content(&img_tag, lol_html::html_content::ContentType::Html);
     } else {
-        let mut img_url = if src.contains(' ') {
-            utf8_percent_encode(&src, FRAGMENT).to_string()
+        let img_url: Cow<str> = if src.contains(' ') {
+            Cow::Owned(utf8_percent_encode(&src, FRAGMENT).to_string())
+        } else if src.starts_with('/') {
+            if let Some(ref u) = url {
+                if let Ok(n) = u.join(&src) {
+                    Cow::Owned(n.to_string())
+                } else {
+                    Cow::Borrowed(&src)
+                }
+            } else {
+                Cow::Borrowed(&src)
+            }
         } else {
-            src.clone()
+            Cow::Borrowed(&src)
         };
 
-        if img_url.starts_with('/') {
-            if let Some(ref u) = url {
-                if let Ok(n) = u.join(&img_url) {
-                    img_url = n.to_string();
-                }
-            }
-        }
-
         el.replace(
-            &format!(
-                "![{}]({}{})",
-                alt,
-                img_url,
-                if !title.is_empty() {
-                    format!(" \"{}\"", title)
-                } else {
-                    "".to_string()
-                }
-            ),
+            &build_image_markdown(&alt, &img_url, &title),
             lol_html::html_content::ContentType::Html,
         );
     }

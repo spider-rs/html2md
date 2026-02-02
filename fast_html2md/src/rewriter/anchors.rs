@@ -3,6 +3,24 @@ use percent_encoding::percent_decode_str;
 use std::borrow::Cow;
 use url::Url;
 
+/// Build markdown link suffix efficiently.
+#[inline]
+fn build_link_suffix(url: &str, needs_angle_brackets: bool) -> String {
+    if needs_angle_brackets {
+        let mut s = String::with_capacity(url.len() + 4); // ](<url>)
+        s.push_str("](<");
+        s.push_str(url);
+        s.push_str(">)");
+        s
+    } else {
+        let mut s = String::with_capacity(url.len() + 3); // ](url)
+        s.push_str("](");
+        s.push_str(url);
+        s.push(')');
+        s
+    }
+}
+
 /// Rewrite the anchor.
 pub(crate) fn rewrite_anchor_element(
     el: &mut Element,
@@ -16,25 +34,23 @@ pub(crate) fn rewrite_anchor_element(
             match &url {
                 Some(url) => {
                     if let Ok(u) = url.join(&decoded_url) {
-                        u.to_string()
+                        Cow::Owned(u.to_string())
                     } else {
-                        decoded_url.to_string()
+                        decoded_url
                     }
                 }
-                None => decoded_url.to_string(),
+                None => decoded_url,
             }
         } else {
-            decoded_url.to_string()
+            decoded_url
         };
 
-        let markdown_url = if resolved_url.contains(|c: char| c.is_ascii_control() || c == ' ') {
-            Cow::Owned(format!("<{}>", resolved_url))
-        } else {
-            Cow::Borrowed(&resolved_url)
-        };
+        let needs_brackets = resolved_url
+            .bytes()
+            .any(|b| b.is_ascii_control() || b == b' ');
 
         el.before("[", Html);
-        el.after(&format!("]({})", markdown_url), Html);
+        el.after(&build_link_suffix(&resolved_url, needs_brackets), Html);
     }
     Ok(())
 }
@@ -52,25 +68,23 @@ pub(crate) fn rewrite_anchor_element_send(
             match &url {
                 Some(url) => {
                     if let Ok(u) = url.join(&decoded_url) {
-                        u.to_string()
+                        Cow::Owned(u.to_string())
                     } else {
-                        decoded_url.to_string()
+                        decoded_url
                     }
                 }
-                None => decoded_url.to_string(),
+                None => decoded_url,
             }
         } else {
-            decoded_url.to_string()
+            decoded_url
         };
 
-        let markdown_url = if resolved_url.contains(|c: char| c.is_ascii_control() || c == ' ') {
-            Cow::Owned(format!("<{}>", resolved_url))
-        } else {
-            Cow::Borrowed(&resolved_url)
-        };
+        let needs_brackets = resolved_url
+            .bytes()
+            .any(|b| b.is_ascii_control() || b == b' ');
 
         el.before("[", Html);
-        el.after(&format!("]({})", markdown_url), Html);
+        el.after(&build_link_suffix(&resolved_url, needs_brackets), Html);
     }
     Ok(())
 }

@@ -477,8 +477,6 @@ pub async fn convert_html_to_markdown_send_with_size(
     url: &Option<Url>,
     chunk_size: usize,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use futures_util::stream::{self, StreamExt};
-
     let settings = get_rewriter_settings_send(commonmark, custom, url.clone());
     let mut rewrited_bytes: Vec<u8> = Vec::with_capacity(estimate_markdown(html));
 
@@ -486,11 +484,11 @@ pub async fn convert_html_to_markdown_send_with_size(
         rewrited_bytes.extend_from_slice(c);
     });
 
+    let bytes = html.as_bytes();
+
+    // Process in chunks without async overhead for in-memory data
     let mut wrote_error = false;
-
-    let mut stream = stream::iter(html.as_bytes().chunks(chunk_size));
-
-    while let Some(chunk) = stream.next().await {
+    for chunk in bytes.chunks(chunk_size) {
         if rewriter.write(chunk).is_err() {
             wrote_error = true;
             break;
