@@ -14,4 +14,14 @@ name = "parse"
 path = "parse.rs"
 harness = false
 
+[[bench]]
+name = "throughput"
+path = "throughput.rs"
+harness = false
+
+[[bench]]
+name = "regression"
+path = "regression.rs"
+harness = false
+
 [features]

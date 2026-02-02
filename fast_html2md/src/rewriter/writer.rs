@@ -144,7 +144,10 @@ pub fn get_rewriter_settings(
                 list_item_start_flag_text.set(false);
             }
 
-            *el.as_mut_str() = crate::replace_markdown_chars(s.into());
+            // Only allocate if escaping is actually needed
+            if let Some(escaped) = crate::replace_markdown_chars_opt(s) {
+                *el.as_mut_str() = escaped;
+            }
             Ok(())
         }
     ));
@@ -180,6 +183,7 @@ pub fn get_rewriter_settings(
     // ELEMENT HANDLER: manage flags + call handle_tag
     let list_item_start_flag_el = list_item_start_flag.clone();
     let in_table_flag_el = in_table_flag.clone();
+
     element_content_handlers.push(element!("*", move |el| {
         // Table start: enable flag and add end-tag handler to disable.
         if el.tag_name().as_str() == "table" {
@@ -322,7 +326,10 @@ pub fn get_rewriter_settings_send(
                 flag_clear(&*flags_text, F_LI_START);
             }
 
-            *el.as_mut_str() = crate::replace_markdown_chars(s.into());
+            // Only allocate if escaping is actually needed
+            if let Some(escaped) = crate::replace_markdown_chars_opt(s) {
+                *el.as_mut_str() = escaped;
+            }
             Ok(())
         }
     ));
@@ -455,7 +462,7 @@ pub(crate) fn convert_html_to_markdown(
 ) -> Result<String, Box<dyn std::error::Error>> {
     let settings = get_rewriter_settings(commonmark, custom, url.clone());
 
-    match rewrite_str(&Box::new(html), settings) {
+    match rewrite_str(html, settings) {
         Ok(markdown) => Ok(clean_markdown_bytes(&markdown)),
         Err(e) => Err(e.into()),
     }

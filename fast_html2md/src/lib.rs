@@ -1,6 +1,4 @@
 use extended::sifter::{WhitespaceSifter, WhitespaceSifterBytes};
-use lazy_static::lazy_static;
-use regex::Regex;
 
 // we want to just use the rewriter instead for v0.1.
 pub mod extended;
@@ -18,12 +16,11 @@ pub use scraper::{
     parse_html_extended,
 };
 
-lazy_static! {
-    static ref MARKDOWN_MIDDLE_KEYCHARS: Regex = Regex::new(r"[<>*\\_~]").expect("valid regex pattern"); // for Markdown escaping
-    static ref MARKDOWN_MIDDLE_KEYCHARS_SET: regex::RegexSet = regex::RegexSet::new(&[
-        r"[<>*\\_~]",  // Matches any single markdown character
-        r"&nbsp;"      // Matches the entire "&nbsp;" string
-    ]).expect("valid regex set");
+// Regex patterns only needed for the scraper feature
+#[cfg(feature = "scraper")]
+lazy_static::lazy_static! {
+    pub(crate) static ref MARKDOWN_MIDDLE_KEYCHARS: regex::Regex =
+        regex::Regex::new(r"[<>*\\_~]").expect("valid regex pattern");
 }
 
 /// Main function of this library to come. Rewrites incoming HTML, converts it into Markdown
@@ -122,42 +119,81 @@ pub fn clean_markdown_bytes(input: &Vec<u8>) -> String {
     input.sift_bytes_preserve_newlines()
 }
 
+/// Check if a byte needs markdown escaping.
+#[inline]
+const fn needs_escape(b: u8) -> bool {
+    matches!(b, b'<' | b'>' | b'*' | b'\\' | b'_' | b'~')
+}
+
+/// Check if byte could start a special sequence (escape char or &nbsp;).
+#[inline]
+const fn is_special_byte(b: u8) -> bool {
+    needs_escape(b) || b == b'&'
+}
+
+/// Check if a string contains any characters that need markdown escaping.
+/// Use this to avoid allocation when no escaping is needed.
+#[inline]
+pub fn contains_markdown_chars(input: &str) -> bool {
+    input.as_bytes().iter().any(|&b| is_special_byte(b))
+}
+
 /// Replace the markdown chars cleanly.
-pub fn replace_markdown_chars(input: &str) -> String {
-    use crate::MARKDOWN_MIDDLE_KEYCHARS_SET;
+/// Optimized to scan bytes and process in bulk segments.
+/// Returns None if no changes needed (avoids allocation).
+#[inline]
+pub fn replace_markdown_chars_opt(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
 
-    if !MARKDOWN_MIDDLE_KEYCHARS_SET.is_match(input) {
-        return input.to_string();
-    }
+    // Fast path: scan for any special character
+    let first_special = bytes.iter().position(|&b| is_special_byte(b));
 
-    let mut output = String::new();
-    let mut chars = input.chars().peekable();
+    match first_special {
+        None => None,
+        Some(first_pos) => {
+            // Pre-allocate with some headroom for escapes
+            let mut output = String::with_capacity(input.len() + input.len() / 8);
 
-    while let Some(ch) = chars.next() {
-        if ch == '&' {
-            let mut entity = String::new();
-            entity.push(ch);
-            while let Some(&next_ch) = chars.peek() {
-                entity.push(next_ch);
-                chars.next();
-                if entity == "&nbsp;" {
-                    entity.clear(); // discard &nbsp;
-                    break;
-                } else if next_ch == ';' || entity.len() > 6 {
-                    output.push_str(&entity);
-                    break;
+            // Copy everything before first special char
+            output.push_str(&input[..first_pos]);
+
+            // Process the rest byte-by-byte from first_pos
+            let mut i = first_pos;
+            while i < bytes.len() {
+                let b = bytes[i];
+
+                if needs_escape(b) {
+                    output.push('\\');
+                    output.push(b as char);
+                    i += 1;
+                } else if b == b'&' {
+                    // Check for &nbsp; (6 bytes)
+                    if i + 5 < bytes.len() && &bytes[i..i + 6] == b"&nbsp;" {
+                        // Skip &nbsp; entirely
+                        i += 6;
+                    } else {
+                        output.push('&');
+                        i += 1;
+                    }
+                } else {
+                    // Find the next special character and copy the segment
+                    let segment_start = i;
+                    i += 1;
+                    while i < bytes.len() && !is_special_byte(bytes[i]) {
+                        i += 1;
+                    }
+                    output.push_str(&input[segment_start..i]);
                 }
             }
-            if !entity.is_empty() {
-                output.push_str(&entity);
-            }
-        } else if "<>*\\_~".contains(ch) {
-            output.push('\\');
-            output.push(ch);
-        } else {
-            output.push(ch);
+
+            Some(output)
         }
     }
+}
 
-    output
+/// Replace the markdown chars cleanly.
+/// Optimized to scan bytes and process in bulk segments.
+#[inline]
+pub fn replace_markdown_chars(input: &str) -> String {
+    replace_markdown_chars_opt(input).unwrap_or_else(|| input.to_string())
 }
