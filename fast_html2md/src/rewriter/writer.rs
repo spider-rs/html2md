@@ -75,7 +75,7 @@ pub fn get_rewriter_settings(
     custom: &Option<std::collections::HashSet<String>>,
     url: Option<Url>,
 ) -> RewriteStrSettings<'static, 'static> {
-    let mut list_type = None;
+    let mut list_type: Option<&'static str> = None;
     let mut order_counter = 0usize;
 
     let quote_depth = Rc::new(AtomicUsize::new(0));
@@ -256,7 +256,7 @@ pub fn get_rewriter_settings_send(
     custom: &Option<std::collections::HashSet<String>>,
     url: Option<Url>,
 ) -> lol_html::send::Settings<'static, 'static> {
-    let mut list_type = None;
+    let mut list_type: Option<&'static str> = None;
     let mut order_counter = 0usize;
 
     let quote_depth = Arc::new(AtomicUsize::new(0));

@@ -209,6 +209,12 @@ fn sift_preallocated(bytes: &[u8], out: &mut String) {
     sift_trim_end(out, is_last_whitespace);
 }
 
+/// Check if byte is a "regular" ASCII char (not whitespace, not high bit set).
+#[inline]
+const fn is_regular_ascii(b: u8) -> bool {
+    b > 0x20 && b < 0x7F // printable ASCII excluding space
+}
+
 /// Sift preallocated until newline (preserves deduped newlines and trims spaces before them).
 fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut String) {
     sift_trim_start(bytes, ind, out);
@@ -217,7 +223,27 @@ fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut Stri
     let mut is_last_carriage_return = false;
 
     while *ind < bytes.len() {
-        match get_char_metadata(bytes[*ind]) {
+        let b = bytes[*ind];
+
+        // Fast path: batch process runs of regular ASCII characters
+        if is_regular_ascii(b) {
+            let start = *ind;
+            *ind += 1;
+
+            // Scan ahead for more regular ASCII
+            while *ind < bytes.len() && is_regular_ascii(bytes[*ind]) {
+                *ind += 1;
+            }
+
+            // Safety: we verified all bytes are ASCII (< 0x80)
+            let slice = unsafe { std::str::from_utf8_unchecked(&bytes[start..*ind]) };
+            out.push_str(slice);
+            is_last_whitespace = false;
+            is_last_carriage_return = false;
+            continue;
+        }
+
+        match get_char_metadata(b) {
             Character::SingleByte { data } => {
                 *ind += 1;
 
