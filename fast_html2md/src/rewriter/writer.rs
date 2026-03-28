@@ -1,6 +1,6 @@
 use super::handle::handle_tag;
 use super::quotes::rewrite_blockquote_text;
-use crate::clean_markdown_bytes;
+use crate::extended::sifter::WhitespaceSifter;
 use crate::rewriter::{handle::handle_tag_send, quotes::rewrite_blockquote_text_send};
 use lol_html::{doc_comments, doctype, element, html_content::EndTag, text, RewriteStrSettings};
 use std::cell::Cell;
@@ -58,6 +58,25 @@ fn estimate_markdown(html: &str) -> usize {
 // ===== send flags packed into one atomic =====
 const F_IN_TABLE: u8 = 1 << 0;
 const F_LI_START: u8 = 1 << 1;
+
+/// Decode common HTML entities from the markdown output.
+#[inline]
+fn clean_markdown_bytes(bytes: &[u8]) -> String {
+    let s = match std::str::from_utf8(bytes) {
+        Ok(s) => s.to_string(),
+        Err(_) => return String::from_utf8_lossy(bytes).to_string(),
+    };
+
+    // Decode HTML entities (order matters)
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&#x27;", "'")
+        .replace("&nbsp;", " ")
+        .sift_preserve_newlines()
+}
 
 #[inline]
 fn flag_set(flags: &AtomicU8, mask: u8) {
