@@ -60,7 +60,7 @@ pub fn handle_tag(
     // Add the markdown equivalents before/after the element.
     match element_name {
         "h1" => {
-            element.before("# ", Text);
+            element.before("# ", Html);
             insert_newline_after(element);
         }
         "h2" => {
@@ -285,7 +285,7 @@ pub fn handle_tag_send(
         }
 
         "q" | "cite" | "blockquote" => {
-            let _ = rewrite_blockquote_element_send(element, quote_depth.clone());
+            let _ = rewrite_blockquote_element_send(element, quote_depth);
         }
 
         "div" | "section" | "header" | "footer" => {

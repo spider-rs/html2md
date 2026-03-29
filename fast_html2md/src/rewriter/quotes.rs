@@ -57,35 +57,35 @@ pub(crate) fn rewrite_blockquote_element_send(
     Ok(())
 }
 
-// Function to handle text within <blockquote> elements
-pub(crate) fn rewrite_blockquote_text(
-    text_chunk: &mut TextChunk<'_>,
-    quote_depth: Rc<AtomicUsize>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
+/// Apply quote prefixes to text lines without allocating a Vec.
+#[inline]
+fn apply_quote_prefix(text_chunk: &mut TextChunk<'_>, quote_depth: &AtomicUsize) {
     let depth = quote_depth.load(std::sync::atomic::Ordering::Relaxed);
 
     // Fast path: no quoting needed at depth 0
     if depth == 0 {
-        return Ok(());
+        return;
     }
 
     let quote_prefix = get_quote_prefix(depth);
     let text = text_chunk.as_str();
-    let lines: Vec<&str> = text.lines().collect();
-    let total_lines = lines.len();
     let last = text_chunk.last_in_text_node();
 
-    // Pre-allocate output buffer
-    let estimated_size = text.len() + quote_prefix.len() * total_lines;
+    // Count newlines for capacity estimate (single byte scan)
+    let newline_count = text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+    let estimated_size = text.len() + quote_prefix.len() * (newline_count + 1);
     let mut modified_text = String::with_capacity(estimated_size);
 
-    for (i, line) in lines.iter().enumerate() {
-        if i >= 1 && i == total_lines - 1 {
+    let mut lines = text.lines().peekable();
+    let mut i = 0usize;
+    while let Some(line) = lines.next() {
+        if i >= 1 && lines.peek().is_none() {
             modified_text.push_str(line);
         } else {
             modified_text.push_str(&quote_prefix);
             modified_text.push_str(line);
         }
+        i += 1;
     }
 
     text_chunk.replace(&modified_text, ContentType::Html);
@@ -93,46 +93,22 @@ pub(crate) fn rewrite_blockquote_text(
     if last {
         text_chunk.after("\n", ContentType::Text);
     }
+}
 
+// Function to handle text within <blockquote> elements
+pub(crate) fn rewrite_blockquote_text(
+    text_chunk: &mut TextChunk<'_>,
+    quote_depth: &AtomicUsize,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    apply_quote_prefix(text_chunk, quote_depth);
     Ok(())
 }
 
 // Function to handle text within <blockquote> elements sync
 pub(crate) fn rewrite_blockquote_text_send(
     text_chunk: &mut TextChunk<'_>,
-    quote_depth: Arc<AtomicUsize>,
+    quote_depth: &AtomicUsize,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let depth = quote_depth.load(std::sync::atomic::Ordering::Relaxed);
-
-    // Fast path: no quoting needed at depth 0
-    if depth == 0 {
-        return Ok(());
-    }
-
-    let quote_prefix = get_quote_prefix(depth);
-    let text = text_chunk.as_str();
-    let lines: Vec<&str> = text.lines().collect();
-    let total_lines = lines.len();
-    let last = text_chunk.last_in_text_node();
-
-    // Pre-allocate output buffer
-    let estimated_size = text.len() + quote_prefix.len() * total_lines;
-    let mut modified_text = String::with_capacity(estimated_size);
-
-    for (i, line) in lines.iter().enumerate() {
-        if i >= 1 && i == total_lines - 1 {
-            modified_text.push_str(line);
-        } else {
-            modified_text.push_str(&quote_prefix);
-            modified_text.push_str(line);
-        }
-    }
-
-    text_chunk.replace(&modified_text, ContentType::Html);
-
-    if last {
-        text_chunk.after("\n", ContentType::Text);
-    }
-
+    apply_quote_prefix(text_chunk, quote_depth);
     Ok(())
 }

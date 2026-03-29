@@ -117,7 +117,7 @@ pub fn get_rewriter_settings(
     }
 
     element_content_handlers.push(text!("blockquote, q, cite", move |el| {
-        let _ = rewrite_blockquote_text(el, quote_depth1.clone());
+        let _ = rewrite_blockquote_text(el, &quote_depth1);
         Ok(())
     }));
 
@@ -297,7 +297,7 @@ pub fn get_rewriter_settings_send(
     }
 
     element_content_handlers.push(text!("blockquote, q, cite", move |el| {
-        let _ = rewrite_blockquote_text_send(el, quote_depth.clone());
+        let _ = rewrite_blockquote_text_send(el, &quote_depth);
         Ok(())
     }));
 
