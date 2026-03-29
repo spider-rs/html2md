@@ -138,6 +138,74 @@ pub fn contains_markdown_chars(input: &str) -> bool {
     input.as_bytes().iter().any(|&b| is_special_byte(b))
 }
 
+/// Decode a single HTML entity at the start of a byte slice.
+/// Returns the decoded string and the number of bytes consumed, or None if not a recognized entity.
+/// Handles named entities (&amp; &lt; &gt; &quot; &nbsp; &apos;) and numeric (&#N; &#xH;).
+#[inline]
+fn decode_html_entity(bytes: &[u8]) -> Option<(&'static str, usize)> {
+    debug_assert_eq!(bytes[0], b'&');
+
+    // Find the semicolon (cap search at 10 bytes for perf — longest named entity we care about is &nbsp; = 6)
+    let limit = bytes.len().min(12);
+    let semi = bytes[1..limit].iter().position(|&b| b == b';')?;
+    let entity = &bytes[1..semi + 1]; // between & and ;
+    let consumed = semi + 2; // includes & and ;
+
+    match entity {
+        b"amp" => Some(("&", consumed)),
+        b"lt" => Some(("\\<", consumed)),
+        b"gt" => Some(("\\>", consumed)),
+        b"quot" => Some(("\"", consumed)),
+        b"apos" => Some(("'", consumed)),
+        b"nbsp" => Some(("", consumed)), // strip non-breaking spaces like before
+        _ if entity.first() == Some(&b'#') => decode_numeric_entity(entity, consumed),
+        _ => None,
+    }
+}
+
+/// Decode numeric HTML entities: &#39; &#x27; etc.
+#[inline]
+fn decode_numeric_entity(entity: &[u8], consumed: usize) -> Option<(&'static str, usize)> {
+    let (digits, radix) = if entity.get(1) == Some(&b'x') || entity.get(1) == Some(&b'X') {
+        (&entity[2..], 16)
+    } else {
+        (&entity[1..], 10)
+    };
+
+    if digits.is_empty() {
+        return None;
+    }
+
+    // Parse into a u32 without allocation
+    let mut val: u32 = 0;
+    for &b in digits {
+        let d = match b {
+            b'0'..=b'9' => (b - b'0') as u32,
+            b'a'..=b'f' if radix == 16 => (b - b'a' + 10) as u32,
+            b'A'..=b'F' if radix == 16 => (b - b'A' + 10) as u32,
+            _ => return None,
+        };
+        val = val.checked_mul(radix)?.checked_add(d)?;
+    }
+
+    // Map common code points to static strings to avoid allocation
+    match val {
+        0x26 => Some(("&", consumed)),          // &
+        0x3C => Some(("\\<", consumed)),         // <
+        0x3E => Some(("\\>", consumed)),         // >
+        0x22 => Some(("\"", consumed)),          // "
+        0x27 => Some(("'", consumed)),           // '
+        0xA0 => Some(("", consumed)),            // nbsp
+        0x2014 => Some(("\u{2014}", consumed)),  // em dash
+        0x2013 => Some(("\u{2013}", consumed)),  // en dash
+        0x2018 => Some(("\u{2018}", consumed)),  // left single quote
+        0x2019 => Some(("\u{2019}", consumed)),  // right single quote
+        0x201C => Some(("\u{201c}", consumed)),  // left double quote
+        0x201D => Some(("\u{201d}", consumed)),  // right double quote
+        _ => None, // unrecognized numeric entity — pass through as-is
+    }
+}
+
 /// Replace the markdown chars cleanly.
 /// Optimized to scan bytes and process in bulk segments.
 /// Returns None if no changes needed (avoids allocation).
@@ -167,10 +235,10 @@ pub fn replace_markdown_chars_opt(input: &str) -> Option<String> {
                     output.push(b as char);
                     i += 1;
                 } else if b == b'&' {
-                    // Check for &nbsp; (6 bytes)
-                    if i + 5 < bytes.len() && &bytes[i..i + 6] == b"&nbsp;" {
-                        // Skip &nbsp; entirely
-                        i += 6;
+                    // Decode HTML entities in a single pass
+                    if let Some((decoded, len)) = decode_html_entity(&bytes[i..]) {
+                        output.push_str(decoded);
+                        i += len;
                     } else {
                         output.push('&');
                         i += 1;

@@ -178,4 +178,28 @@ pub mod test {
         );
         assert_eq!(md, "This is NOT a header!\nsomething -------")
     }
+
+    #[test]
+    fn test_html_entity_decoding() {
+        // Common HTML entities should be decoded in text content
+        let html = r#"<p>Tom &amp; Jerry</p>"#;
+        let md = rewrite_html(html, false);
+        assert_eq!(md, "Tom & Jerry");
+
+        let html = r#"<p>1 &lt; 2 &gt; 0</p>"#;
+        let md = rewrite_html(html, false);
+        assert_eq!(md, "1 \\< 2 \\> 0");
+
+        let html = r#"<p>He said &quot;hello&quot;</p>"#;
+        let md = rewrite_html(html, false);
+        assert_eq!(md, r#"He said "hello""#);
+
+        let html = r#"<p>It&#39;s fine</p>"#;
+        let md = rewrite_html(html, false);
+        assert_eq!(md, "It's fine");
+
+        let html = r#"<p>non&nbsp;breaking</p>"#;
+        let md = rewrite_html(html, false);
+        assert_eq!(md, "nonbreaking");
+    }
 }
