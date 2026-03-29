@@ -105,6 +105,52 @@ pub async fn rewrite_html_custom_with_url_streaming(
         .unwrap_or_default()
 }
 
+/// Re-export the stream error type.
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+pub use rewriter::writer::StreamConvertError;
+
+/// Convert an async stream of HTML byte chunks into markdown.
+///
+/// Genuinely async — yields to the executor while waiting for each input chunk.
+/// Accepts any `Stream<Item = Result<B, E>>` where `B: AsRef<[u8]>`, so it works
+/// with `Vec<u8>`, `bytes::Bytes`, `&[u8]`, etc.
+///
+/// # Arguments
+/// * `stream` - an async stream of byte chunks (e.g. from an HTTP response body)
+/// * `commonmark` - adjust output to CommonMark spec
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+pub async fn rewrite_html_stream<S, B, E>(
+    stream: S,
+    commonmark: bool,
+) -> Result<String, StreamConvertError<E>>
+where
+    S: futures_util::Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+{
+    rewriter::writer::convert_html_stream_to_markdown(stream, &None, commonmark, &None).await
+}
+
+/// Convert an async stream of HTML byte chunks into markdown with custom options.
+///
+/// # Arguments
+/// * `stream` - an async stream of byte chunks
+/// * `custom` - custom tag handler producers for tags to ignore
+/// * `commonmark` - adjust output to CommonMark spec
+/// * `url` - base URL for resolving relative links
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+pub async fn rewrite_html_stream_custom_with_url<S, B, E>(
+    stream: S,
+    custom: &Option<std::collections::HashSet<String>>,
+    commonmark: bool,
+    url: &Option<url::Url>,
+) -> Result<String, StreamConvertError<E>>
+where
+    S: futures_util::Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+{
+    rewriter::writer::convert_html_stream_to_markdown(stream, custom, commonmark, url).await
+}
+
 /// Called after all processing has been finished
 ///
 /// Clears excessive punctuation that would be trimmed by renderer anyway

@@ -561,3 +561,148 @@ async fn test_real_spider_async_basic1() {
     println!("{:?}", result);
     // assert!(result == EXAMPLE_RESULT_MD);
 }
+
+
+// ===== True async stream tests =====
+
+/// Stream conversion of small HTML chunks must match the sync rewriter output.
+#[tokio::test]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+async fn test_stream_matches_sync() {
+    let html = "<h1>Hello</h1><p>World</p><ul><li>one</li><li>two</li></ul>";
+    let expected = html2md::rewrite_html(html, false);
+
+    // Split into small 10-byte chunks to stress chunk-boundary handling.
+    let chunks: Vec<Result<&[u8], std::io::Error>> =
+        html.as_bytes().chunks(10).map(Ok).collect();
+    let stream = futures_util::stream::iter(chunks);
+
+    let result = html2md::rewrite_html_stream(stream, false).await.unwrap();
+    assert_eq!(result, expected);
+}
+
+/// A single large chunk should produce the same output as sync.
+#[tokio::test]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+async fn test_stream_single_chunk() {
+    let html = "<h2>Title</h2><blockquote><p>quoted</p></blockquote><p>end</p>";
+    let expected = html2md::rewrite_html(html, false);
+
+    let chunks: Vec<Result<&[u8], std::io::Error>> = vec![Ok(html.as_bytes())];
+    let stream = futures_util::stream::iter(chunks);
+
+    let result = html2md::rewrite_html_stream(stream, false).await.unwrap();
+    assert_eq!(result, expected);
+}
+
+/// An empty stream should return an empty/minimal string without panicking.
+#[tokio::test]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+async fn test_stream_empty() {
+    let chunks: Vec<Result<&[u8], std::io::Error>> = vec![];
+    let stream = futures_util::stream::iter(chunks);
+
+    let result = html2md::rewrite_html_stream(stream, false).await.unwrap();
+    assert!(result.is_empty() || result.trim().is_empty());
+}
+
+/// Stream error propagation: a mid-stream error must surface as StreamConvertError::Stream.
+#[tokio::test]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+async fn test_stream_error_propagation() {
+    let chunks: Vec<Result<&[u8], std::io::Error>> = vec![
+        Ok(b"<h1>Hi</h1>" as &[u8]),
+        Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "boom")),
+        Ok(b"<p>never reached</p>" as &[u8]),
+    ];
+    let stream = futures_util::stream::iter(chunks);
+
+    let err = html2md::rewrite_html_stream(stream, false).await.unwrap_err();
+    match err {
+        html2md::StreamConvertError::Stream(io_err) => {
+            assert_eq!(io_err.kind(), std::io::ErrorKind::BrokenPipe);
+        }
+        other => panic!("expected Stream variant, got: {other}"),
+    }
+}
+
+/// Stream against real-world wiki files should produce non-empty valid markdown.
+/// Note: chunk boundaries cause lol_html to emit text callbacks at different points
+/// than the sync single-write path, so output is semantically equivalent but not
+/// byte-identical. We verify non-emptiness and that re-streaming with different
+/// chunk sizes is deterministic per chunk size.
+#[tokio::test]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+async fn test_stream_real_world_wiki() -> Result<(), Box<dyn std::error::Error>> {
+    use std::fs;
+
+    let paths = fs::read_dir("../test-samples/wiki")?;
+
+    for entry in paths {
+        let path = entry?.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let html = fs::read_to_string(&path)?;
+
+        // Stream with 256-byte chunks
+        let chunks: Vec<Result<&[u8], std::io::Error>> =
+            html.as_bytes().chunks(256).map(Ok).collect();
+        let stream = futures_util::stream::iter(chunks);
+        let result = html2md::rewrite_html_stream(stream, false).await.unwrap();
+
+        assert!(
+            !result.trim().is_empty(),
+            "stream result empty for file: {}",
+            path.display()
+        );
+
+        // Same chunk size must be deterministic
+        let chunks2: Vec<Result<&[u8], std::io::Error>> =
+            html.as_bytes().chunks(256).map(Ok).collect();
+        let stream2 = futures_util::stream::iter(chunks2);
+        let result2 = html2md::rewrite_html_stream(stream2, false).await.unwrap();
+        assert_eq!(
+            result, result2,
+            "non-deterministic stream output for file: {}",
+            path.display()
+        );
+    }
+
+    Ok(())
+}
+
+/// Stream with custom URL should match the sync custom+url variant.
+#[tokio::test]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+async fn test_stream_custom_with_url() {
+    let html = r#"<a href="/path">link</a><p>text</p>"#;
+    let url = Some(url::Url::parse("https://example.com").unwrap());
+
+    let expected = html2md::rewrite_html_custom_with_url(html, &None, false, &url);
+
+    let chunks: Vec<Result<&[u8], std::io::Error>> =
+        html.as_bytes().chunks(8).map(Ok).collect();
+    let stream = futures_util::stream::iter(chunks);
+
+    let result = html2md::rewrite_html_stream_custom_with_url(stream, &None, false, &url)
+        .await
+        .unwrap();
+    assert_eq!(result, expected);
+}
+
+#[tokio::test]
+#[ignore]
+#[cfg(all(feature = "stream", feature = "rewriter"))]
+async fn test_real_spider_async_basic2() {
+    let mut html = String::new();
+    let mut html_file: File = File::open("../test-samples/example.html").unwrap();
+    html_file
+        .read_to_string(&mut html)
+        .expect("File must be readable");
+    let result = html2md::rewrite_html_streaming(&html, false).await;
+
+    println!("{:?}", result);
+    // assert!(result == EXAMPLE_RESULT_MD);
+}

@@ -512,3 +512,71 @@ pub async fn convert_html_to_markdown_send(
 ) -> Result<String, Box<dyn std::error::Error>> {
     convert_html_to_markdown_send_with_size(html, custom, commonmark, url, 8192).await
 }
+
+/// Error type for stream-based conversion.
+#[cfg(feature = "stream")]
+#[derive(Debug)]
+pub enum StreamConvertError<E> {
+    /// The input stream yielded an error.
+    Stream(E),
+    /// lol_html rewriting failed.
+    Rewrite(lol_html::errors::RewritingError),
+}
+
+#[cfg(feature = "stream")]
+impl<E: std::fmt::Display> std::fmt::Display for StreamConvertError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Stream(e) => write!(f, "stream error: {e}"),
+            Self::Rewrite(e) => write!(f, "rewrite error: {e}"),
+        }
+    }
+}
+
+#[cfg(feature = "stream")]
+impl<E: std::error::Error + 'static> std::error::Error for StreamConvertError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Stream(e) => Some(e),
+            Self::Rewrite(e) => Some(e),
+        }
+    }
+}
+
+/// Convert an async byte stream of HTML into markdown.
+///
+/// Genuinely async — yields to the executor between input chunks via `stream.next().await`.
+/// Uses `lol_html::send::HtmlRewriter` which handles chunk-boundary splitting internally.
+#[cfg(feature = "stream")]
+pub async fn convert_html_stream_to_markdown<S, B, E>(
+    stream: S,
+    custom: &Option<std::collections::HashSet<String>>,
+    commonmark: bool,
+    url: &Option<Url>,
+) -> Result<String, StreamConvertError<E>>
+where
+    S: futures_util::Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+{
+    use futures_util::StreamExt;
+
+    let settings = get_rewriter_settings_send(commonmark, custom, url.clone());
+    let mut output: Vec<u8> = Vec::with_capacity(4096);
+
+    let mut rewriter = lol_html::send::HtmlRewriter::new(settings.into(), |c: &[u8]| {
+        output.extend_from_slice(c);
+    });
+
+    futures_util::pin_mut!(stream);
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.map_err(StreamConvertError::Stream)?;
+        rewriter
+            .write(chunk.as_ref())
+            .map_err(StreamConvertError::Rewrite)?;
+    }
+
+    rewriter.end().map_err(StreamConvertError::Rewrite)?;
+
+    Ok(clean_markdown_bytes(&output))
+}
