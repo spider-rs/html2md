@@ -25,8 +25,8 @@ lazy_static = "1"
 percent-encoding = "2"
 auto_encoder = "0"
 url = "2"
-markup5ever_rcdom = { version = "0.39", package = "spider-markup5ever_rcdom", optional = true }
-html5ever = { version = "0.39", package = "spider-html5ever", optional = true }
+markup5ever_rcdom = { version = "0.40", package = "spider-markup5ever_rcdom", optional = true }
+html5ever = { version = "0.40", package = "spider-html5ever", optional = true }
 lol_html = { version = "2", optional = true }
 futures-util = { version = "0.3", optional = true, default-features = false }
 
