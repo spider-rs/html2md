@@ -28,11 +28,12 @@ fn get_ol_marker(n: usize) -> std::borrow::Cow<'static, str> {
 #[inline]
 pub(crate) fn handle_list_or_item(
     element: &mut Element,
+    tag_name: &str,
     list_type: &mut Option<&'static str>,
     order_counter: &mut usize,
     list_item_start: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    match element.tag_name().as_str() {
+    match tag_name {
         "ul" | "menu" => {
             *list_type = Some("ul");
             order_counter.reset();
@@ -61,11 +62,12 @@ pub(crate) fn handle_list_or_item(
 #[inline]
 pub(crate) fn handle_list_or_item_send(
     element: &mut lol_html::send::Element,
+    tag_name: &str,
     list_type: &mut Option<&'static str>,
     order_counter: &mut usize,
     list_item_start: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    match element.tag_name().as_str() {
+    match tag_name {
         "ul" | "menu" => {
             *list_type = Some("ul");
             order_counter.reset();

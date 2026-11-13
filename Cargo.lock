@@ -64,6 +64,7 @@ dependencies = [
  "criterion",
  "fast_html2md",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -337,7 +338,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "fast_html2md"
-version = "0.0.64"
+version = "0.0.65"
 dependencies = [
  "auto_encoder",
  "futures-util",

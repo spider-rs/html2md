@@ -4,3 +4,8 @@ members = [
     "benches"
 ]
 resolver = "2"
+
+# Tests run the encoding detector and the HTML rewriter on every fixture.
+# Optimized dependencies keep that to seconds; this crate stays a debug build.
+[profile.dev.package."*"]
+opt-level = 2

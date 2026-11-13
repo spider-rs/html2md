@@ -8,6 +8,7 @@ edition = "2021"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 fast_html2md = { path = "../fast_html2md", version = "0", features = ["stream", "scraper"] }
 tokio = { version = "1", features = [ "full" ] }
+url = "2"
 
 [[bench]]
 name = "parse"
@@ -22,6 +23,11 @@ harness = false
 [[bench]]
 name = "regression"
 path = "regression.rs"
+harness = false
+
+[[bench]]
+name = "production"
+path = "production.rs"
 harness = false
 
 [features]
