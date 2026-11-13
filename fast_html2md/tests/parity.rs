@@ -157,6 +157,35 @@ fn random_bytes_match_legacy() {
     }
 }
 
+/// Long random inputs, so open labels pass the fold limit with malformed
+/// bytes inside them.
+#[test]
+fn long_random_bytes_match_legacy() {
+    let mut rng = Rng(0x0f0f_1234_abcd_9876);
+    for round in 0..150 {
+        let mut input = random_input(&mut rng, 12_000);
+        if round % 2 == 0 {
+            // Open a label early so most of the input sits inside it.
+            input.splice(0..0, b"x [\x02".iter().copied());
+        }
+        let want = legacy_lines(&input);
+        let got = new_lines(&input);
+        assert!(want == got, "long round {round}: line sift differs");
+    }
+}
+
+/// A chunk size of 0 used to panic in `chunks`. It now reads as 1 and gives
+/// the same output as any other size on input with no chunk sensitive text.
+#[tokio::test]
+async fn zero_chunk_size_does_not_panic() {
+    let html = "<h1>Title</h1><p>one two</p><ul><li>a</li><li>b</li></ul>";
+    let zero = html2md::rewrite_html_custom_with_url_and_chunk(html, &None, true, &None, 0).await;
+    let whole =
+        html2md::rewrite_html_custom_with_url_and_chunk(html, &None, true, &None, 8192).await;
+    assert_eq!(zero, whole);
+    assert!(zero.contains("# Title"));
+}
+
 /// A label longer than the fold limit goes back to keeping newlines.
 #[test]
 fn runaway_label_matches_legacy() {

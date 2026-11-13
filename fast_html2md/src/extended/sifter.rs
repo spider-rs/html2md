@@ -628,6 +628,9 @@ mod tests {
         "see [\x02 \u{a0} caf\u{e9} \u{a0}\n \x03](https://example.com/a b)\n".as_bytes(),
         b"\x80a\xC3\n\xFFzz\xE3\x81 x\xBF\xBF\xBF\xBF y",
         b"word word  word \n word\tword\x0Cword",
+        b"[\x02 a \xE2",
+        b"[\x02 a \xE3\x81\x82\xE3AB \x03](u)",
+        "a \u{feff}".as_bytes(),
     ];
 
     /// Cutting the input anywhere, into two or three pieces, never changes
@@ -658,6 +661,42 @@ mod tests {
                 sink.push(std::slice::from_ref(b));
             }
             assert_eq!(sink.finish(), whole(case), "{case:02x?}");
+        }
+    }
+
+    /// Seeded random bytes, malformed sequences included, cut into random
+    /// pieces. Long enough to pass the label fold limit.
+    #[test]
+    fn random_bytes_in_random_pieces_give_the_same_output() {
+        const ALPHABET: &[u8] = &[
+            b'a', b'b', b'.', b'[', b']', b' ', b' ', b'\t', b'\n', b'\r', 0x0C, 0x02, 0x02, 0x03,
+            0x80, 0xA0, 0xAF, 0xBB, 0xBF, 0xC2, 0xC3, 0xE2, 0xE3, 0xEF, 0xF0, 0xFF,
+        ];
+        let mut state: u64 = 0x2545_f491_4f6c_dd1d;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+
+        for round in 0..300 {
+            let len = (next() % 9000) as usize;
+            let mut input = Vec::with_capacity(len);
+            for _ in 0..len {
+                input.push(ALPHABET[(next() % ALPHABET.len() as u64) as usize]);
+            }
+
+            let want = whole(&input);
+            let mut sink = SiftSink::with_capacity(0);
+            let mut from = 0usize;
+            while from < input.len() {
+                let size = 1 + (next() % 97) as usize;
+                let to = (from + size).min(input.len());
+                sink.push(&input[from..to]);
+                from = to;
+            }
+            assert!(sink.finish() == want, "round {round}");
         }
     }
 
