@@ -171,10 +171,53 @@ const fn needs_escape(b: u8) -> bool {
     matches!(b, b'<' | b'>' | b'*' | b'\\' | b'_' | b'~')
 }
 
+/// Marks the start of a link label in the raw rewriter output. The rewriter
+/// emits `[` followed by this byte, and the final whitespace sift consumes it.
+/// It never reaches the returned markdown.
+pub(crate) const LINK_LABEL_OPEN: u8 = 0x02;
+
+/// Marks the end of a link label in the raw rewriter output. The rewriter
+/// emits this byte followed by `](url)`, and the final whitespace sift
+/// consumes it. It never reaches the returned markdown.
+pub(crate) const LINK_LABEL_CLOSE: u8 = 0x03;
+
+/// `LINK_LABEL_OPEN` as a str, for the rewriter's `before` insert.
+pub(crate) const LINK_LABEL_OPEN_STR: &str = "[\u{2}";
+
+/// True when the byte is one of the two link label markers.
+#[inline]
+pub(crate) const fn is_link_label_marker(b: u8) -> bool {
+    b == LINK_LABEL_OPEN || b == LINK_LABEL_CLOSE
+}
+
+/// Drop literal link label marker bytes from page supplied text, so only the
+/// rewriter's own markers reach the sift. Borrows when there are none, which
+/// is every real page.
+#[inline]
+pub(crate) fn strip_link_label_markers(input: &str) -> std::borrow::Cow<'_, str> {
+    if input.bytes().any(is_link_label_marker) {
+        std::borrow::Cow::Owned(
+            input
+                .chars()
+                .filter(|c| *c != '\u{2}' && *c != '\u{3}')
+                .collect(),
+        )
+    } else {
+        std::borrow::Cow::Borrowed(input)
+    }
+}
+
 /// Check if byte could start a special sequence (escape char or &nbsp;).
 #[inline]
 const fn is_special_byte(b: u8) -> bool {
     needs_escape(b) || b == b'&'
+}
+
+/// Bytes the text escape scan stops on: the special bytes plus the link
+/// label markers, which are dropped from page text.
+#[inline]
+const fn is_text_scan_byte(b: u8) -> bool {
+    is_special_byte(b) || is_link_label_marker(b)
 }
 
 /// Check if a string contains any characters that need markdown escaping.
@@ -260,7 +303,7 @@ pub fn replace_markdown_chars_opt(input: &str) -> Option<String> {
     let bytes = input.as_bytes();
 
     // Fast path: scan for any special character
-    let first_special = bytes.iter().position(|&b| is_special_byte(b));
+    let first_special = bytes.iter().position(|&b| is_text_scan_byte(b));
 
     match first_special {
         None => None,
@@ -280,6 +323,10 @@ pub fn replace_markdown_chars_opt(input: &str) -> Option<String> {
                     output.push('\\');
                     output.push(b as char);
                     i += 1;
+                } else if is_link_label_marker(b) {
+                    // Literal marker bytes in page text would open or close
+                    // a label in the sift. Drop them.
+                    i += 1;
                 } else if b == b'&' {
                     // Decode HTML entities in a single pass
                     if let Some((decoded, len)) = decode_html_entity(&bytes[i..]) {
@@ -293,7 +340,7 @@ pub fn replace_markdown_chars_opt(input: &str) -> Option<String> {
                     // Find the next special character and copy the segment
                     let segment_start = i;
                     i += 1;
-                    while i < bytes.len() && !is_special_byte(bytes[i]) {
+                    while i < bytes.len() && !is_text_scan_byte(bytes[i]) {
                         i += 1;
                     }
                     output.push_str(&input[segment_start..i]);
