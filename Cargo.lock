@@ -64,6 +64,7 @@ dependencies = [
  "criterion",
  "fast_html2md",
  "tokio",
+ "url",
 ]
 
 [[package]]
