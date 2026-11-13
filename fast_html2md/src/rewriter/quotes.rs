@@ -19,7 +19,7 @@ fn get_quote_prefix(depth: usize) -> std::borrow::Cow<'static, str> {
 // Function to handle <blockquote> elements
 pub(crate) fn rewrite_blockquote_element(
     el: &mut Element,
-    quote_depth: Rc<AtomicUsize>,
+    quote_depth: &Rc<AtomicUsize>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     quote_depth.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -40,7 +40,7 @@ pub(crate) fn rewrite_blockquote_element(
 // Function to handle <blockquote> elements sync
 pub(crate) fn rewrite_blockquote_element_send(
     el: &mut lol_html::send::Element,
-    quote_depth: Arc<AtomicUsize>,
+    quote_depth: &Arc<AtomicUsize>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     quote_depth.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 

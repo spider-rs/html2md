@@ -1,6 +1,6 @@
 use super::handle::handle_tag;
 use super::quotes::rewrite_blockquote_text;
-use crate::clean_markdown_bytes;
+use crate::extended::sifter::SiftSink;
 use crate::rewriter::{handle::handle_tag_send, quotes::rewrite_blockquote_text_send};
 use lol_html::{doc_comments, doctype, element, html_content::EndTag, text, RewriteStrSettings};
 use std::cell::Cell;
@@ -185,8 +185,11 @@ pub fn get_rewriter_settings(
     let in_table_flag_el = in_table_flag.clone();
 
     element_content_handlers.push(element!("*", move |el| {
+        // The tag name is an allocation, so it is read once per element.
+        let tag_name = el.tag_name();
+
         // Table start: enable flag and add end-tag handler to disable.
-        if el.tag_name().as_str() == "table" {
+        if tag_name == "table" {
             in_table_flag_el.set(true);
             if let Some(hvec) = el.end_tag_handlers() {
                 let in_table_flag_end = in_table_flag_el.clone();
@@ -205,11 +208,12 @@ pub fn get_rewriter_settings(
 
         let _ = handle_tag(
             el,
+            &tag_name,
             commonmark,
             &url,
             &mut list_type,
             &mut order_counter,
-            quote_depth.clone(),
+            &quote_depth,
             &mut in_table,
             &mut table_row_start,
             &mut list_item_start,
@@ -365,8 +369,11 @@ pub fn get_rewriter_settings_send(
     // ELEMENT HANDLER (send): set/clear packed flags + call handle_tag_send
     let flags_el = flags.clone();
     element_content_handlers.push(element!("*", move |el| {
+        // The tag name is an allocation, so it is read once per element.
+        let tag_name = el.tag_name();
+
         // table start
-        if el.tag_name().as_str() == "table" {
+        if tag_name == "table" {
             flag_set(&*flags_el, F_IN_TABLE);
 
             if let Some(hvec) = el.end_tag_handlers() {
@@ -387,11 +394,12 @@ pub fn get_rewriter_settings_send(
 
         let _ = handle_tag_send(
             el,
+            &tag_name,
             commonmark,
             &url,
             &mut list_type,
             &mut order_counter,
-            quote_depth1.clone(),
+            &quote_depth1,
             &mut in_table,
             &mut table_row_start,
             &mut list_item_start,
@@ -436,21 +444,22 @@ pub fn get_rewriter_settings_send(
     }
 }
 
-/// Shortcut to rewrite string and encode correctly
+/// Rewrite the HTML and sift the markdown as the rewriter writes it, so the
+/// output is produced in one pass.
 pub(crate) fn rewrite_str<'h, 's, H: lol_html::HandlerTypes>(
     html: &str,
     settings: impl Into<lol_html::Settings<'h, 's, H>>,
-) -> Result<Vec<u8>, lol_html::errors::RewritingError> {
-    let mut output = Vec::with_capacity(estimate_markdown(html));
+) -> Result<String, lol_html::errors::RewritingError> {
+    let mut sink = SiftSink::with_capacity(estimate_markdown(html));
 
     let mut rewriter = lol_html::HtmlRewriter::new(settings.into(), |c: &[u8]| {
-        output.extend_from_slice(c);
+        sink.push(c);
     });
 
     rewriter.write(html.as_bytes())?;
     rewriter.end()?;
 
-    Ok(output)
+    Ok(sink.finish())
 }
 
 /// Convert to markdown streaming re-writer
@@ -463,7 +472,7 @@ pub(crate) fn convert_html_to_markdown(
     let settings = get_rewriter_settings(commonmark, custom, url.clone());
 
     match rewrite_str(html, settings) {
-        Ok(markdown) => Ok(clean_markdown_bytes(&markdown)),
+        Ok(markdown) => Ok(markdown),
         Err(e) => Err(e.into()),
     }
 }
@@ -478,28 +487,31 @@ pub async fn convert_html_to_markdown_send_with_size(
     chunk_size: usize,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let settings = get_rewriter_settings_send(commonmark, custom, url.clone());
-    let mut rewrited_bytes: Vec<u8> = Vec::with_capacity(estimate_markdown(html));
+    // The rewriter writes into the sift, so the markdown is cleaned as it is
+    // produced and the output is written once.
+    let mut sink = SiftSink::with_capacity(estimate_markdown(html));
 
-    let mut rewriter = lol_html::send::HtmlRewriter::new(settings.into(), |c: &[u8]| {
-        rewrited_bytes.extend_from_slice(c);
-    });
+    {
+        let mut rewriter = lol_html::send::HtmlRewriter::new(settings.into(), |c: &[u8]| {
+            sink.push(c);
+        });
 
-    let bytes = html.as_bytes();
+        // Process in chunks without async overhead for in-memory data.
+        // `chunks` panics on a size of 0, so a 0 is read as 1.
+        let mut wrote_error = false;
+        for chunk in html.as_bytes().chunks(chunk_size.max(1)) {
+            if rewriter.write(chunk).is_err() {
+                wrote_error = true;
+                break;
+            }
+        }
 
-    // Process in chunks without async overhead for in-memory data
-    let mut wrote_error = false;
-    for chunk in bytes.chunks(chunk_size) {
-        if rewriter.write(chunk).is_err() {
-            wrote_error = true;
-            break;
+        if !wrote_error {
+            let _ = rewriter.end();
         }
     }
 
-    if !wrote_error {
-        let _ = rewriter.end();
-    }
-
-    Ok(clean_markdown_bytes(&rewrited_bytes))
+    Ok(sink.finish())
 }
 
 /// Convert to markdown streaming re-writer
@@ -561,10 +573,10 @@ where
     use futures_util::StreamExt;
 
     let settings = get_rewriter_settings_send(commonmark, custom, url.clone());
-    let mut output: Vec<u8> = Vec::with_capacity(4096);
+    let mut sink = SiftSink::with_capacity(4096);
 
     let mut rewriter = lol_html::send::HtmlRewriter::new(settings.into(), |c: &[u8]| {
-        output.extend_from_slice(c);
+        sink.push(c);
     });
 
     futures_util::pin_mut!(stream);
@@ -578,5 +590,5 @@ where
 
     rewriter.end().map_err(StreamConvertError::Rewrite)?;
 
-    Ok(clean_markdown_bytes(&output))
+    Ok(sink.finish())
 }

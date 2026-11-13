@@ -13,33 +13,29 @@ use lol_html::html_content::{
     Element,
 };
 use std::rc::Rc;
-use std::sync::{
-    atomic::{AtomicUsize},
-    Arc,
-};
+use std::sync::{atomic::AtomicUsize, Arc};
 use url::Url;
 
 /// Handle the lol_html tag (sync).
 ///
 /// NOTE:
+/// - `element_name` is the lowercase tag name, read once by the caller.
 /// - `in_table` tracks whether we're inside a <table>.
 /// - `table_row_start` tracks start-of-row so we can emit a leading '|' once per row.
 /// - `list_item_start` is set by list.rs when "* " / "N. " is emitted; used to avoid "*\nText".
 #[inline]
 pub fn handle_tag(
     element: &mut Element,
+    element_name: &str,
     commonmark: bool,
     url: &Option<Url>,
     list_type: &mut Option<&'static str>,
     order_counter: &mut usize,
-    quote_depth: Rc<AtomicUsize>,
+    quote_depth: &Rc<AtomicUsize>,
     in_table: &mut bool,
     table_row_start: &mut bool,
     list_item_start: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let element_name = element.tag_name();
-    let element_name = element_name.as_str();
-
     let remove_attrs = commonmark && (element_name == "sub" || element_name == "sup");
 
     // check common mark includes.
@@ -136,12 +132,18 @@ pub fn handle_tag(
             let _ = handle_iframe(element);
         }
         "b" | "i" | "s" | "strong" | "em" | "del" => {
-            let _ = rewrite_style_element(element);
+            let _ = rewrite_style_element(element, element_name);
         }
 
         // LISTS: list.rs sets list_item_start=true when it emits a marker.
         "ol" | "ul" | "menu" | "li" => {
-            let _ = handle_list_or_item(element, list_type, order_counter, list_item_start);
+            let _ = handle_list_or_item(
+                element,
+                element_name,
+                list_type,
+                order_counter,
+                list_item_start,
+            );
         }
 
         "q" | "cite" | "blockquote" => {
@@ -170,18 +172,16 @@ pub fn handle_tag(
 #[inline]
 pub fn handle_tag_send(
     element: &mut lol_html::send::Element,
+    element_name: &str,
     commonmark: bool,
     url: &Option<Url>,
     list_type: &mut Option<&'static str>,
     order_counter: &mut usize,
-    quote_depth: Arc<AtomicUsize>,
+    quote_depth: &Arc<AtomicUsize>,
     in_table: &mut bool,
     table_row_start: &mut bool,
     list_item_start: &mut bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let element_name = element.tag_name();
-    let element_name = element_name.as_str();
-
     let remove_attrs = commonmark && (element_name == "sub" || element_name == "sup");
 
     // check common mark includes.
@@ -276,12 +276,18 @@ pub fn handle_tag_send(
             let _ = handle_iframe_send(element);
         }
         "b" | "i" | "s" | "strong" | "em" | "del" => {
-            let _ = rewrite_style_element_send(element);
+            let _ = rewrite_style_element_send(element, element_name);
         }
 
         // LISTS
         "ol" | "ul" | "menu" | "li" => {
-            let _ = handle_list_or_item_send(element, list_type, order_counter, list_item_start);
+            let _ = handle_list_or_item_send(
+                element,
+                element_name,
+                list_type,
+                order_counter,
+                list_item_start,
+            );
         }
 
         "q" | "cite" | "blockquote" => {
