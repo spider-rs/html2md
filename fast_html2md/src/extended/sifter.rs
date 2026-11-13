@@ -1,3 +1,4 @@
+use crate::{is_link_label_marker, LINK_LABEL_CLOSE, LINK_LABEL_OPEN};
 use auto_encoder::auto_encode_bytes;
 
 /// Character handling bytes.
@@ -215,12 +216,49 @@ const fn is_regular_ascii(b: u8) -> bool {
     b > 0x20 && b < 0x7F // printable ASCII excluding space
 }
 
+/// Longest link label, in output bytes, that the sift folds onto one line.
+/// Past this the label is treated as unclosed (an `<a>` the page never ends)
+/// and newlines are kept again, so a stray marker cannot flatten a page.
+const LINK_LABEL_MAX: usize = 4096;
+
+/// `sift_trim_start` for the newline-preserving sift. It also drops link
+/// label markers met before the first real byte of a line.
+fn sift_trim_start_line(bytes: &[u8], ind: &mut usize, out: &mut String) {
+    while *ind < bytes.len() {
+        match get_char_metadata(bytes[*ind]) {
+            Character::SingleByte { data } => {
+                *ind += 1;
+                if !is_ascii_whitespace(data) && !is_link_label_marker(data) {
+                    out.push(data as char);
+                    break;
+                }
+            }
+            Character::MultiByte { len } => {
+                let _ = extend_from_bytes_with_len(bytes, ind, out, len);
+                break;
+            }
+        }
+    }
+}
+
 /// Sift preallocated until newline (preserves deduped newlines and trims spaces before them).
+///
+/// Link labels: the rewriter writes `[` plus `LINK_LABEL_OPEN` before an
+/// anchor and `LINK_LABEL_CLOSE` plus `](url)` after it. Between the two, every
+/// whitespace run, newlines included, becomes one space, and the label is
+/// trimmed at both ends, the way a browser renders inline anchor text. Both
+/// markers are dropped. This happens inside the same single pass.
 fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut String) {
-    sift_trim_start(bytes, ind, out);
+    sift_trim_start_line(bytes, ind, out);
 
     let mut is_last_whitespace = false;
     let mut is_last_carriage_return = false;
+    // Open link labels; 0 outside any label.
+    let mut label_depth: u32 = 0;
+    // `out.len()` where the outermost open label started.
+    let mut label_start: usize = 0;
+    // True right after a label opens, until its first non-whitespace byte.
+    let mut label_trim = false;
 
     while *ind < bytes.len() {
         let b = bytes[*ind];
@@ -240,6 +278,7 @@ fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut Stri
             out.push_str(slice);
             is_last_whitespace = false;
             is_last_carriage_return = false;
+            label_trim = false;
             continue;
         }
 
@@ -248,6 +287,21 @@ fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut Stri
                 *ind += 1;
 
                 if is_ascii_whitespace(data) {
+                    if label_depth > 0 {
+                        if out.len().saturating_sub(label_start) <= LINK_LABEL_MAX {
+                            is_last_carriage_return = false;
+                            if label_trim || is_last_whitespace {
+                                continue;
+                            }
+                            is_last_whitespace = true;
+                            out.push(' ');
+                            continue;
+                        }
+                        // Runaway label: stop folding, keep newlines from here.
+                        label_depth = 0;
+                        label_trim = false;
+                    }
+
                     if is_newline(data) {
                         // Drop trailing ASCII space before newline (fixes " \n").
                         if is_last_whitespace {
@@ -269,15 +323,45 @@ fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut Stri
                     }
                     is_last_whitespace = true;
                     out.push(' ');
+                } else if data == LINK_LABEL_OPEN {
+                    if label_depth == 0 {
+                        label_start = out.len();
+                    }
+                    label_depth = label_depth.saturating_add(1);
+                    label_trim = true;
+                    // The `[` before the marker is never a space, so this is
+                    // already false. Keep the close-side pop label-local.
+                    is_last_whitespace = false;
+                    is_last_carriage_return = false;
+                } else if data == LINK_LABEL_CLOSE {
+                    if label_depth > 0 {
+                        // Trim the label's trailing space.
+                        if is_last_whitespace {
+                            out.pop();
+                            is_last_whitespace = false;
+                        }
+                        label_depth -= 1;
+                    }
+                    label_trim = false;
+                    is_last_carriage_return = false;
                 } else {
                     is_last_whitespace = false;
                     is_last_carriage_return = false;
+                    label_trim = false;
                     out.push(data as char);
                 }
             }
             Character::MultiByte { len } => {
+                let was_last_whitespace = is_last_whitespace;
                 let was_ws = extend_from_bytes_with_len(bytes, ind, out, len);
-                is_last_whitespace = was_ws;
+                if was_ws && label_depth > 0 && (label_trim || was_last_whitespace) {
+                    // Unicode space inside a label folds like ASCII space.
+                    out.pop();
+                    is_last_whitespace = was_last_whitespace;
+                } else {
+                    is_last_whitespace = was_ws;
+                    label_trim = false;
+                }
                 is_last_carriage_return = false;
             }
         }
