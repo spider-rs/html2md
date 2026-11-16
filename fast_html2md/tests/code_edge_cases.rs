@@ -319,6 +319,31 @@ async fn heading_permalinks_are_dropped() {
 }
 
 #[tokio::test]
+async fn permalink_gate_edges() {
+    // The class is read only for an anchor whose href holds a fragment or is
+    // absent. An absolute permalink and one with no href are still dropped. A
+    // permalink class on a link to another page is not a permalink, so the
+    // link stays.
+    let html = "<h2 id=\"a\">Alpha<a class=\"headerlink\" href=\"https://example.com/doc#a\">\u{a7}</a></h2><h2 id=\"b\">Beta<a class=\"hash-link\">\u{b6}</a></h2><p><a class=\"headerlink\" href=\"https://example.com/other\">other</a> <a href=\"https://example.com/plain\">plain</a></p>";
+    for commonmark in [false, true] {
+        for (path, got) in every_path(html, commonmark).await {
+            assert!(got.contains("## Alpha\n"), "{path}: {got:?}");
+            assert!(got.contains("## Beta\n"), "{path}: {got:?}");
+            assert!(!got.contains('\u{a7}'), "{path}: {got:?}");
+            assert!(!got.contains('\u{b6}'), "{path}: {got:?}");
+            assert!(
+                got.contains("[other](https://example.com/other)"),
+                "{path}: {got:?}"
+            );
+            assert!(
+                got.contains("[plain](https://example.com/plain)"),
+                "{path}: {got:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn heading_whose_text_is_a_self_link_keeps_the_text() {
     // Only the permalink class drops an anchor. A heading wrapped in a plain
     // self-link keeps its text and its link.
