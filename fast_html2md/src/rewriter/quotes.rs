@@ -68,7 +68,16 @@ fn apply_quote_prefix(text_chunk: &mut TextChunk<'_>, quote_depth: &AtomicUsize)
     }
 
     let quote_prefix = get_quote_prefix(depth);
-    let text = text_chunk.as_str();
+    // This replaces the chunk, so the text handler's marker drop is lost.
+    // Drop literal marker bytes here as well.
+    // Only text that holds a marker byte is copied.
+    let stripped: String;
+    let text: &str = if text_chunk.as_str().bytes().any(crate::is_sift_marker) {
+        stripped = crate::strip_sift_markers(text_chunk.as_str()).into_owned();
+        &stripped
+    } else {
+        text_chunk.as_str()
+    };
     let last = text_chunk.last_in_text_node();
 
     // Count newlines for capacity estimate (single byte scan)

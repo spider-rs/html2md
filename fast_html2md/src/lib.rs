@@ -190,16 +190,39 @@ pub(crate) const fn is_link_label_marker(b: u8) -> bool {
     b == LINK_LABEL_OPEN || b == LINK_LABEL_CLOSE
 }
 
-/// Drop literal link label marker bytes from page supplied text, so only the
-/// rewriter's own markers reach the sift. Borrows when there are none, which
-/// is every real page.
+/// Marks the start of a `<pre>` block in the raw rewriter output. The final
+/// whitespace sift writes the opening fence for it and copies every byte up
+/// to `CODE_BLOCK_CLOSE` as it is: indentation, blank lines and all. It never
+/// reaches the returned markdown.
+pub(crate) const CODE_BLOCK_OPEN: u8 = 0x0E;
+
+/// Marks the end of a `<pre>` block in the raw rewriter output. The sift
+/// writes the closing fence for it. It never reaches the returned markdown.
+pub(crate) const CODE_BLOCK_CLOSE: u8 = 0x0F;
+
+/// `CODE_BLOCK_OPEN` as a str, for the rewriter's `before` insert.
+pub(crate) const CODE_BLOCK_OPEN_STR: &str = "\u{e}";
+
+/// `CODE_BLOCK_CLOSE` as a str, for the rewriter's `after` insert.
+pub(crate) const CODE_BLOCK_CLOSE_STR: &str = "\u{f}";
+
+/// True when the byte is any marker the sift consumes: the two link label
+/// markers and the two code block markers.
 #[inline]
-pub(crate) fn strip_link_label_markers(input: &str) -> std::borrow::Cow<'_, str> {
-    if input.bytes().any(is_link_label_marker) {
+pub(crate) const fn is_sift_marker(b: u8) -> bool {
+    is_link_label_marker(b) || b == CODE_BLOCK_OPEN || b == CODE_BLOCK_CLOSE
+}
+
+/// Drop literal marker bytes from page supplied text, so only the rewriter's
+/// own markers reach the sift. Borrows when there are none, which is every
+/// real page.
+#[inline]
+pub(crate) fn strip_sift_markers(input: &str) -> std::borrow::Cow<'_, str> {
+    if input.bytes().any(is_sift_marker) {
         std::borrow::Cow::Owned(
             input
                 .chars()
-                .filter(|c| *c != '\u{2}' && *c != '\u{3}')
+                .filter(|c| !matches!(c, '\u{2}' | '\u{3}' | '\u{e}' | '\u{f}'))
                 .collect(),
         )
     } else {
@@ -213,11 +236,11 @@ const fn is_special_byte(b: u8) -> bool {
     needs_escape(b) || b == b'&'
 }
 
-/// Bytes the text escape scan stops on: the special bytes plus the link
-/// label markers, which are dropped from page text.
+/// Bytes the text escape scan stops on: the special bytes plus the sift
+/// markers, which are dropped from page text.
 #[inline]
 const fn is_text_scan_byte(b: u8) -> bool {
-    is_special_byte(b) || is_link_label_marker(b)
+    is_special_byte(b) || is_sift_marker(b)
 }
 
 /// Check if a string contains any characters that need markdown escaping.
@@ -246,7 +269,8 @@ fn decode_html_entity(bytes: &[u8]) -> Option<(&'static str, usize)> {
         b"gt" => Some(("\\>", consumed)),
         b"quot" => Some(("\"", consumed)),
         b"apos" => Some(("'", consumed)),
-        b"nbsp" => Some(("", consumed)), // strip non-breaking spaces like before
+        // A non-breaking space is still a space: dropping it joins two words.
+        b"nbsp" => Some((" ", consumed)),
         _ if entity.first() == Some(&b'#') => decode_numeric_entity(entity, consumed),
         _ => None,
     }
@@ -280,18 +304,18 @@ fn decode_numeric_entity(entity: &[u8], consumed: usize) -> Option<(&'static str
     // Map common code points to static strings to avoid allocation
     match val {
         0x26 => Some(("&", consumed)),          // &
-        0x3C => Some(("\\<", consumed)),         // <
-        0x3E => Some(("\\>", consumed)),         // >
-        0x22 => Some(("\"", consumed)),          // "
-        0x27 => Some(("'", consumed)),           // '
-        0xA0 => Some(("", consumed)),            // nbsp
-        0x2014 => Some(("\u{2014}", consumed)),  // em dash
-        0x2013 => Some(("\u{2013}", consumed)),  // en dash
-        0x2018 => Some(("\u{2018}", consumed)),  // left single quote
-        0x2019 => Some(("\u{2019}", consumed)),  // right single quote
-        0x201C => Some(("\u{201c}", consumed)),  // left double quote
-        0x201D => Some(("\u{201d}", consumed)),  // right double quote
-        _ => None, // unrecognized numeric entity — pass through as-is
+        0x3C => Some(("\\<", consumed)),        // <
+        0x3E => Some(("\\>", consumed)),        // >
+        0x22 => Some(("\"", consumed)),         // "
+        0x27 => Some(("'", consumed)),          // '
+        0xA0 => Some((" ", consumed)),          // nbsp
+        0x2014 => Some(("\u{2014}", consumed)), // em dash
+        0x2013 => Some(("\u{2013}", consumed)), // en dash
+        0x2018 => Some(("\u{2018}", consumed)), // left single quote
+        0x2019 => Some(("\u{2019}", consumed)), // right single quote
+        0x201C => Some(("\u{201c}", consumed)), // left double quote
+        0x201D => Some(("\u{201d}", consumed)), // right double quote
+        _ => None,                              // unrecognized numeric entity — pass through as-is
     }
 }
 
@@ -323,9 +347,9 @@ pub fn replace_markdown_chars_opt(input: &str) -> Option<String> {
                     output.push('\\');
                     output.push(b as char);
                     i += 1;
-                } else if is_link_label_marker(b) {
+                } else if is_sift_marker(b) {
                     // Literal marker bytes in page text would open or close
-                    // a label in the sift. Drop them.
+                    // a label or a code block in the sift. Drop them.
                     i += 1;
                 } else if b == b'&' {
                     // Decode HTML entities in a single pass
@@ -350,6 +374,117 @@ pub fn replace_markdown_chars_opt(input: &str) -> Option<String> {
             Some(output)
         }
     }
+}
+
+/// Longest entity, `&` and `;` included, that [`code_text_opt`] decodes. A
+/// decimal reference to the last code point, `&#1114111;`, is ten bytes.
+const CODE_ENTITY_MAX: usize = 10;
+
+/// Decode one entity at the start of `bytes` for code text. Returns the
+/// character and the bytes consumed. Unlike `decode_html_entity` nothing is
+/// escaped, a non-breaking space becomes a space, and every numeric
+/// reference decodes.
+#[inline]
+fn decode_code_entity(bytes: &[u8]) -> Option<(char, usize)> {
+    let limit = bytes.len().min(CODE_ENTITY_MAX);
+    let semi = bytes.get(1..limit)?.iter().position(|&b| b == b';')?;
+    let entity = bytes.get(1..semi + 1)?;
+    let consumed = semi + 2;
+
+    let decoded = match entity {
+        b"amp" => '&',
+        b"lt" => '<',
+        b"gt" => '>',
+        b"quot" => '"',
+        b"apos" => '\'',
+        b"nbsp" => ' ',
+        [b'#', digits @ ..] => {
+            let (digits, radix) = match digits {
+                [b'x' | b'X', hex @ ..] => (hex, 16),
+                _ => (digits, 10),
+            };
+            if digits.is_empty() {
+                return None;
+            }
+            let mut value: u32 = 0;
+            for &b in digits {
+                let digit = (b as char).to_digit(radix)?;
+                value = value.checked_mul(radix)?.checked_add(digit)?;
+            }
+            match char::from_u32(value)? {
+                '\u{a0}' => ' ',
+                // A reference to NUL or to a marker byte never becomes one.
+                '\0' | '\u{2}' | '\u{3}' | '\u{e}' | '\u{f}' => return None,
+                c => c,
+            }
+        }
+        _ => return None,
+    };
+
+    Some((decoded, consumed))
+}
+
+/// Text inside `<pre>`, `<code>` and `<samp>`: the five named entities,
+/// `&nbsp;` and numeric references are decoded, sift markers are dropped and
+/// nothing is escaped, because a backslash is literal inside a code span or
+/// a fence. Returns `None` when the text is already what should be written.
+#[inline]
+pub(crate) fn code_text_opt(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let first = bytes.iter().position(|&b| b == b'&' || is_sift_marker(b))?;
+
+    let mut output = String::with_capacity(input.len());
+    output.push_str(input.get(..first)?);
+
+    let mut i = first;
+    while let Some(&b) = bytes.get(i) {
+        if is_sift_marker(b) {
+            i += 1;
+        } else if b == b'&' {
+            match bytes.get(i..).and_then(decode_code_entity) {
+                Some((decoded, len)) => {
+                    output.push(decoded);
+                    i += len;
+                }
+                None => {
+                    output.push('&');
+                    i += 1;
+                }
+            }
+        } else {
+            let start = i;
+            i += 1;
+            while bytes
+                .get(i)
+                .is_some_and(|&b| b != b'&' && !is_sift_marker(b))
+            {
+                i += 1;
+            }
+            // Both ends sit next to ASCII bytes or the ends of the input, so
+            // they are char boundaries.
+            output.push_str(input.get(start..i)?);
+        }
+    }
+
+    Some(output)
+}
+
+/// The length of an entity that the end of `input` cuts short: a `&` in the
+/// last few bytes with no `;` after it and only name or number characters in
+/// between. The rewriter holds those bytes back until the next piece of the
+/// same text node, so a reference split across two writes still decodes.
+#[inline]
+pub(crate) fn cut_entity_len(input: &str) -> usize {
+    let bytes = input.as_bytes();
+    let from = bytes.len().saturating_sub(CODE_ENTITY_MAX - 1);
+    for (at, b) in bytes.iter().enumerate().skip(from).rev() {
+        match b {
+            b'&' => return bytes.len() - at,
+            b'#' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => {}
+            _ => return 0,
+        }
+    }
+    0
 }
 
 /// Replace the markdown chars cleanly.

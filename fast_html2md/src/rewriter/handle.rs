@@ -154,9 +154,12 @@ pub fn handle_tag(
             insert_newline_before(element);
             insert_newline_after(element);
         }
+        // The sift writes the fences and keeps what is between the markers
+        // byte for byte. The writer handles every tag inside a `<pre>`, so
+        // none of them reaches this function.
         "pre" => {
-            element.before("\n```\n", Html);
-            element.after("\n```\n", Html);
+            element.before(crate::CODE_BLOCK_OPEN_STR, Html);
+            element.after(crate::CODE_BLOCK_CLOSE_STR, Html);
         }
         "code" | "samp" => {
             element.before("`", Html);
@@ -298,9 +301,12 @@ pub fn handle_tag_send(
             insert_newline_before_send(element);
             insert_newline_after_send(element);
         }
+        // The sift writes the fences and keeps what is between the markers
+        // byte for byte. The writer handles every tag inside a `<pre>`, so
+        // none of them reaches this function.
         "pre" => {
-            element.before("\n```\n", Html);
-            element.after("\n```\n", Html);
+            element.before(crate::CODE_BLOCK_OPEN_STR, Html);
+            element.after(crate::CODE_BLOCK_CLOSE_STR, Html);
         }
         "code" | "samp" => {
             element.before("`", Html);

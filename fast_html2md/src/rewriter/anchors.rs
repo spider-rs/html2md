@@ -1,4 +1,4 @@
-use crate::{strip_link_label_markers, LINK_LABEL_CLOSE, LINK_LABEL_OPEN_STR};
+use crate::{strip_sift_markers, LINK_LABEL_CLOSE, LINK_LABEL_OPEN_STR};
 use lol_html::html_content::{ContentType::Html, Element};
 use percent_encoding::percent_decode_str;
 use std::borrow::Cow;
@@ -14,7 +14,7 @@ fn build_link_suffix(url: &str, needs_angle_brackets: bool) -> String {
     if needs_angle_brackets {
         // A URL with control bytes could carry a literal marker. Drop it so
         // the sift sees only ours.
-        let url = strip_link_label_markers(url);
+        let url = strip_sift_markers(url);
         let mut s = String::with_capacity(url.len() + 5); // \x03](<url>)
         s.push(LINK_LABEL_CLOSE as char);
         s.push_str("](<");
@@ -58,12 +58,29 @@ fn resolve_href<'a>(href: &'a str, url: &Option<Url>) -> (Cow<'a, str>, bool) {
     (resolved_url, needs_brackets)
 }
 
+/// True for a heading permalink: `class="headerlink"` (mkdocs, Sphinx) or
+/// `class="hash-link"` (Docusaurus). Its only text is a symbol such as `§`,
+/// `¶` or a zero width space, so the markdown drops the whole anchor. The
+/// class decides it, never the text, so a heading whose text is a link keeps
+/// it.
+#[inline]
+fn is_permalink(class: Option<String>) -> bool {
+    class.is_some_and(|c| {
+        c.split_ascii_whitespace()
+            .any(|t| t == "headerlink" || t == "hash-link")
+    })
+}
+
 /// Rewrite the anchor.
 pub(crate) fn rewrite_anchor_element(
     el: &mut Element,
     _commonmark: bool,
     url: &Option<Url>,
 ) -> Result<(), std::io::Error> {
+    if is_permalink(el.get_attribute("class")) {
+        el.remove();
+        return Ok(());
+    }
     if let Some(href) = el.get_attribute("href") {
         let (resolved_url, needs_brackets) = resolve_href(&href, url);
         el.before(LINK_LABEL_OPEN_STR, Html);
@@ -78,6 +95,10 @@ pub(crate) fn rewrite_anchor_element_send(
     _commonmark: bool,
     url: &Option<Url>,
 ) -> Result<(), std::io::Error> {
+    if is_permalink(el.get_attribute("class")) {
+        el.remove();
+        return Ok(());
+    }
     if let Some(href) = el.get_attribute("href") {
         let (resolved_url, needs_brackets) = resolve_href(&href, url);
         el.before(LINK_LABEL_OPEN_STR, Html);

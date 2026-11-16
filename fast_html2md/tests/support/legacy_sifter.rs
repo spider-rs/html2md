@@ -324,10 +324,12 @@ fn sift_preallocated_until_newline(bytes: &[u8], ind: &mut usize, out: &mut Stri
                     is_last_whitespace = true;
                     out.push(' ');
                 } else if data == LINK_LABEL_OPEN {
-                    if label_depth == 0 {
-                        label_start = out.len();
-                    }
-                    label_depth = label_depth.saturating_add(1);
+                    // The one edit to this file since it was frozen: a label
+                    // that opens inside an open one restarts it. The line
+                    // was `label_depth.saturating_add(1)` with `label_start`
+                    // kept when a label was already open.
+                    label_start = out.len();
+                    label_depth = 1;
                     label_trim = true;
                     // The `[` before the marker is never a space, so this is
                     // already false. Keep the close-side pop label-local.

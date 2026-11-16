@@ -8,11 +8,11 @@ const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').ad
 /// Build markdown image syntax efficiently.
 #[inline]
 fn build_image_markdown(alt: &str, url: &str, title: &str) -> String {
-    // Attribute text can carry a literal link label marker. Drop it so the
+    // Attribute text can carry a literal sift marker. Drop it so the
     // sift sees only the rewriter's own markers.
-    let alt = crate::strip_link_label_markers(alt);
-    let title = crate::strip_link_label_markers(title);
-    let url = crate::strip_link_label_markers(url);
+    let alt = crate::strip_sift_markers(alt);
+    let title = crate::strip_sift_markers(title);
+    let url = crate::strip_sift_markers(url);
     let (alt, url, title) = (alt.as_ref(), url.as_ref(), title.as_ref());
     if title.is_empty() {
         // ![alt](url)
@@ -40,7 +40,7 @@ fn build_image_markdown(alt: &str, url: &str, title: &str) -> String {
 /// Push attribute to HTML string efficiently.
 #[inline]
 fn push_attr(s: &mut String, name: &str, value: &str) {
-    let value = crate::strip_link_label_markers(value);
+    let value = crate::strip_sift_markers(value);
     s.push(' ');
     s.push_str(name);
     s.push_str("=\"");
@@ -65,7 +65,7 @@ pub(crate) fn rewrite_image_element(
     if commonmark && (height.is_some() || width.is_some() || align.is_some()) {
         let mut img_tag = String::with_capacity(src.len() + 64);
         img_tag.push_str("<img src=\"");
-        img_tag.push_str(&crate::strip_link_label_markers(&src));
+        img_tag.push_str(&crate::strip_sift_markers(&src));
         img_tag.push('"');
 
         if !alt.is_empty() {
@@ -129,7 +129,7 @@ pub(crate) fn rewrite_image_element_send(
     if commonmark && (height.is_some() || width.is_some() || align.is_some()) {
         let mut img_tag = String::with_capacity(src.len() + 64);
         img_tag.push_str("<img src=\"");
-        img_tag.push_str(&crate::strip_link_label_markers(&src));
+        img_tag.push_str(&crate::strip_sift_markers(&src));
         img_tag.push('"');
 
         if !alt.is_empty() {

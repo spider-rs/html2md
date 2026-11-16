@@ -2,11 +2,13 @@ use super::handle::handle_tag;
 use super::quotes::rewrite_blockquote_text;
 use crate::extended::sifter::SiftSink;
 use crate::rewriter::{handle::handle_tag_send, quotes::rewrite_blockquote_text_send};
-use lol_html::{doc_comments, doctype, element, html_content::EndTag, text, RewriteStrSettings};
+use lol_html::{
+    doc_comments, doc_text, doctype, element, html_content::EndTag, text, RewriteStrSettings,
+};
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{
-    atomic::{AtomicU8, AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering},
     Arc,
 };
 use url::Url;
@@ -58,6 +60,132 @@ fn estimate_markdown(html: &str) -> usize {
 // ===== send flags packed into one atomic =====
 const F_IN_TABLE: u8 = 1 << 0;
 const F_LI_START: u8 = 1 << 1;
+/// Inside a `<pre>`: text is code and no tag writes markdown.
+const F_IN_PRE: u8 = 1 << 2;
+/// Inside a `<code>` or `<samp>` outside a `<pre>`: text is code.
+const F_IN_CODE: u8 = 1 << 3;
+
+// ===== text pieces =====
+
+/// Rewrite one piece of a text node with `rewrite`: `code_text_opt` for text
+/// in a `<pre>`, `<code>` or `<samp>`, `replace_markdown_chars_opt` for the
+/// rest.
+///
+/// A text node reaches the handler in pieces cut wherever the input was cut,
+/// so an entity can straddle two of them. `carry` holds the cut entity, at
+/// most nine bytes, until the next piece of the same node. `last` is the
+/// node's final piece, which flushes it, so nothing is held past the node.
+/// Returns `None` when the piece is already what should be written.
+fn text_piece(
+    carry: &mut String,
+    piece: &str,
+    last: bool,
+    rewrite: fn(&str) -> Option<String>,
+) -> Option<String> {
+    if carry.is_empty() {
+        let cut = if last {
+            0
+        } else {
+            crate::cut_entity_len(piece)
+        };
+        if cut == 0 {
+            return rewrite(piece);
+        }
+        let keep = piece.len() - cut;
+        let (head, tail) = (piece.get(..keep)?, piece.get(keep..)?);
+        carry.push_str(tail);
+        return Some(rewrite(head).unwrap_or_else(|| head.to_string()));
+    }
+
+    let mut joined = std::mem::take(carry);
+    joined.push_str(piece);
+    let cut = if last {
+        0
+    } else {
+        crate::cut_entity_len(&joined)
+    };
+    if cut != 0 {
+        let keep = joined.len() - cut;
+        carry.push_str(joined.get(keep..).unwrap_or_default());
+        joined.truncate(keep);
+    }
+    Some(rewrite(&joined).unwrap_or(joined))
+}
+
+// ===== table header delimiter row =====
+//
+// A pipe table needs a delimiter row under its header or a markdown renderer
+// shows the rows as plain text. The writer keeps the first row's shape in one
+// integer and writes `|---|---|` under it when every cell of that row is a
+// `<th>` that covers one column and one row. A first row with a `<td>` is
+// left alone: layout tables look like that, and nothing says their first row
+// is a header.
+
+/// Rows seen in the current table, saturating at 2.
+const T_ROWS: u32 = 0b11;
+/// The first row has a `<th>`.
+const T_HAS_TH: u32 = 1 << 2;
+/// The first row has a `<td>`.
+const T_HAS_TD: u32 = 1 << 3;
+/// The delimiter row is written.
+const T_DONE: u32 = 1 << 4;
+/// Cells in the first row, in the bits from here up.
+const T_CELLS_SHIFT: u32 = 8;
+/// Most columns a delimiter row is written for.
+const T_CELLS_MAX: u32 = 256;
+
+/// True when a `colspan` or `rowspan` value covers more than one cell. A
+/// header row with such a cell has fewer pipe cells than the rows under it,
+/// and a renderer drops the cells past the header's count, so that row gets
+/// no delimiter row.
+#[inline]
+fn spans_cells(span: Option<String>) -> bool {
+    span.map_or(false, |v| v.trim() != "1")
+}
+
+/// The state after a `<th>` or `<td>` start tag. `is_th` is false for a
+/// `<td>` and for a `<th>` that spans cells.
+#[inline]
+fn table_cell(state: u32, is_th: bool) -> u32 {
+    if state & T_ROWS != 1 {
+        return state;
+    }
+    let cells = (state >> T_CELLS_SHIFT)
+        .saturating_add(1)
+        .min(T_CELLS_MAX + 1);
+    let kind = if is_th { T_HAS_TH } else { T_HAS_TD };
+    (state & ((1 << T_CELLS_SHIFT) - 1)) | kind | (cells << T_CELLS_SHIFT)
+}
+
+/// The delimiter row the first row asks for, if it is still owed.
+#[inline]
+fn table_delimiter(state: u32) -> Option<String> {
+    let cells = state >> T_CELLS_SHIFT;
+    let header = state & (T_ROWS | T_HAS_TH | T_HAS_TD | T_DONE) == (1 | T_HAS_TH);
+    if !header || cells == 0 || cells > T_CELLS_MAX {
+        return None;
+    }
+    let mut row = String::with_capacity(cells as usize * 4 + 2);
+    row.push('|');
+    for _ in 0..cells {
+        row.push_str("---|");
+    }
+    row.push('\n');
+    Some(row)
+}
+
+/// The state after a `<tr>` start tag, and the delimiter row to write before
+/// it when this row follows a header row.
+#[inline]
+fn table_row(state: u32) -> (u32, Option<String>) {
+    let delimiter = table_delimiter(state);
+    let mut next = state;
+    if delimiter.is_some() {
+        next |= T_DONE;
+    }
+    let rows = ((state & T_ROWS) + 1).min(2);
+    ((next & !T_ROWS) | rows, delimiter)
+}
 
 #[inline]
 fn flag_set(flags: &AtomicU8, mask: u8) {
@@ -86,6 +214,15 @@ pub fn get_rewriter_settings(
     // flags (non-send) are already fast
     let list_item_start_flag = Rc::new(Cell::new(false));
     let in_table_flag = Rc::new(Cell::new(false));
+    // true inside `<pre>`, `<code>` and `<samp>`: text is code
+    let in_code_flag = Rc::new(Cell::new(false));
+    // true inside `<pre>`: no tag writes markdown
+    let in_pre_flag = Rc::new(Cell::new(false));
+    // true once the text handler has seen the current text chunk (see
+    // `strip_unseen_markers`)
+    let text_seen = Rc::new(Cell::new(false));
+    // the first row of the current table (see `table_row`)
+    let table_head = Rc::new(Cell::new(0u32));
 
     // state passed into handle_tag
     let mut in_table = false;
@@ -116,28 +253,54 @@ pub fn get_rewriter_settings(
         }));
     }
 
+    // Code inside a quote keeps its lines: the quote prefix would join them.
+    let in_code_flag_quote = in_code_flag.clone();
     element_content_handlers.push(text!("blockquote, q, cite", move |el| {
-        let _ = rewrite_blockquote_text(el, &quote_depth1);
+        if !in_code_flag_quote.get() {
+            let _ = rewrite_blockquote_text(el, &quote_depth1);
+        }
         Ok(())
     }));
 
     // TEXT HANDLER: drop whitespace-only nodes inside tables + at list item start
     let list_item_start_flag_text = list_item_start_flag.clone();
     let in_table_flag_text = in_table_flag.clone();
+    let in_code_flag_text = in_code_flag.clone();
+    let text_seen_text = text_seen.clone();
+    let mut text_carry = String::new();
     element_content_handlers.push(text!(
         "*:not(script):not(head):not(style):not(svg)",
         move |el| {
+            text_seen_text.set(true);
+            // code: every byte is kept, nothing is escaped
+            if in_code_flag_text.get() {
+                // code is real text: it ends the list marker fix below
+                if list_item_start_flag_text.get() && !is_ascii_ws_only(el.as_str()) {
+                    list_item_start_flag_text.set(false);
+                }
+                let last = el.last_in_text_node();
+                if let Some(code) =
+                    text_piece(&mut text_carry, el.as_str(), last, crate::code_text_opt)
+                {
+                    *el.as_mut_str() = code;
+                }
+                return Ok(());
+            }
+
             let s = el.as_str();
 
             // inside table: ignore formatting whitespace between cells
-            if in_table_flag_text.get() && is_ascii_ws_only(s) {
+            // A held entity is text, so the piece after it is never dropped.
+            let held = !text_carry.is_empty();
+
+            if in_table_flag_text.get() && !held && is_ascii_ws_only(s) {
                 *el.as_mut_str() = String::new();
                 return Ok(());
             }
 
             // list marker fix: swallow whitespace-only nodes until first real text
             if list_item_start_flag_text.get() {
-                if is_ascii_ws_only(s) {
+                if !held && is_ascii_ws_only(s) {
                     *el.as_mut_str() = String::new();
                     return Ok(());
                 }
@@ -145,7 +308,10 @@ pub fn get_rewriter_settings(
             }
 
             // Only allocate if escaping is actually needed
-            if let Some(escaped) = crate::replace_markdown_chars_opt(s) {
+            let last = el.last_in_text_node();
+            if let Some(escaped) =
+                text_piece(&mut text_carry, s, last, crate::replace_markdown_chars_opt)
+            {
                 *el.as_mut_str() = escaped;
             }
             Ok(())
@@ -183,22 +349,81 @@ pub fn get_rewriter_settings(
     // ELEMENT HANDLER: manage flags + call handle_tag
     let list_item_start_flag_el = list_item_start_flag.clone();
     let in_table_flag_el = in_table_flag.clone();
+    let in_code_flag_el = in_code_flag.clone();
+    let in_pre_flag_el = in_pre_flag.clone();
+    let table_head_el = table_head.clone();
 
     element_content_handlers.push(element!("*", move |el| {
         // The tag name is an allocation, so it is read once per element.
         let tag_name = el.tag_name();
 
-        // Table start: enable flag and add end-tag handler to disable.
-        if tag_name == "table" {
-            in_table_flag_el.set(true);
+        // Inside a `<pre>` a tag is highlighting or a line wrapper. It
+        // writes no markdown; only its text is kept, and a `<br>` is a line
+        // break.
+        if in_pre_flag_el.get() {
+            el.remove_and_keep_content();
+            if tag_name == "br" {
+                el.after("\n", lol_html::html_content::ContentType::Text);
+            }
+            return Ok(());
+        }
+
+        // Code start: text is code until the end tag. A `<pre>` with no end
+        // tag runs to the end of the page, as it does in a browser.
+        let is_pre = tag_name == "pre";
+        if is_pre || ((tag_name == "code" || tag_name == "samp") && !in_code_flag_el.get()) {
             if let Some(hvec) = el.end_tag_handlers() {
-                let in_table_flag_end = in_table_flag_el.clone();
+                in_code_flag_el.set(true);
+                in_pre_flag_el.set(is_pre);
+                let in_code_flag_end = in_code_flag_el.clone();
+                let in_pre_flag_end = in_pre_flag_el.clone();
                 let h: LocalEndHandler =
                     Box::new(move |_end: &mut lol_html::html_content::EndTag<'_>| {
-                        in_table_flag_end.set(false);
+                        in_code_flag_end.set(false);
+                        in_pre_flag_end.set(false);
                         Ok(())
                     });
                 hvec.push(h);
+            }
+        }
+
+        // Table start: enable flag and add end-tag handler to disable.
+        if tag_name == "table" {
+            in_table_flag_el.set(true);
+            table_head_el.set(0);
+            if let Some(hvec) = el.end_tag_handlers() {
+                let in_table_flag_end = in_table_flag_el.clone();
+                let table_head_end = table_head_el.clone();
+                let h: LocalEndHandler =
+                    Box::new(move |end: &mut lol_html::html_content::EndTag<'_>| {
+                        in_table_flag_end.set(false);
+                        // A table that is one header row still gets its
+                        // delimiter row.
+                        if let Some(row) = table_delimiter(table_head_end.get()) {
+                            end.before(&row, lol_html::html_content::ContentType::Html);
+                        }
+                        table_head_end.set(0);
+                        Ok(())
+                    });
+                hvec.push(h);
+            }
+        } else if in_table_flag_el.get() {
+            if tag_name == "tr" {
+                let (next, delimiter) = table_row(table_head_el.get());
+                table_head_el.set(next);
+                if let Some(row) = delimiter {
+                    el.before(&row, lol_html::html_content::ContentType::Html);
+                }
+            } else if tag_name == "th" || tag_name == "td" {
+                // Only the first row decides the delimiter row, so the
+                // cells of every later row cost nothing here.
+                let state = table_head_el.get();
+                if state & T_ROWS == 1 {
+                    let header = tag_name == "th"
+                        && !spans_cells(el.get_attribute("colspan"))
+                        && !spans_cells(el.get_attribute("rowspan"));
+                    table_head_el.set(table_cell(state, header));
+                }
             }
         }
 
@@ -240,6 +465,12 @@ pub fn get_rewriter_settings(
 
     RewriteStrSettings {
         document_content_handlers: vec![
+            doc_text!(move |c| {
+                if !text_seen.replace(false) {
+                    strip_unseen_markers(c);
+                }
+                Ok(())
+            }),
             doc_comments!(|c| {
                 c.remove();
                 Ok(())
@@ -270,6 +501,11 @@ pub fn get_rewriter_settings_send(
 
     // packed flags (single atomic load per handler call)
     let flags = Arc::new(AtomicU8::new(0));
+    // true once the text handler has seen the current text chunk (see
+    // `strip_unseen_markers`)
+    let text_seen = Arc::new(AtomicBool::new(false));
+    // the first row of the current table (see `table_row`)
+    let table_head = Arc::new(AtomicU32::new(0));
 
     // state passed into handle_tag_send
     let mut in_table = false;
@@ -300,29 +536,54 @@ pub fn get_rewriter_settings_send(
         }));
     }
 
+    // Code inside a quote keeps its lines: the quote prefix would join them.
+    let flags_quote = flags.clone();
     element_content_handlers.push(text!("blockquote, q, cite", move |el| {
-        let _ = rewrite_blockquote_text_send(el, &quote_depth);
+        if flags_quote.load(Ordering::Relaxed) & (F_IN_PRE | F_IN_CODE) == 0 {
+            let _ = rewrite_blockquote_text_send(el, &quote_depth);
+        }
         Ok(())
     }));
 
     // TEXT HANDLER (send): single atomic load + ASCII whitespace scan
     let flags_text = flags.clone();
+    let text_seen_text = text_seen.clone();
+    let mut text_carry = String::new();
     element_content_handlers.push(text!(
         "*:not(script):not(head):not(style):not(svg)",
         move |el| {
+            text_seen_text.store(true, Ordering::Relaxed);
             let f = flags_text.load(Ordering::Relaxed);
             let in_table_now = (f & F_IN_TABLE) != 0;
             let li_start_now = (f & F_LI_START) != 0;
 
+            // code: every byte is kept, nothing is escaped
+            if (f & (F_IN_PRE | F_IN_CODE)) != 0 {
+                // code is real text: it ends the list marker fix below
+                if li_start_now && !is_ascii_ws_only(el.as_str()) {
+                    flag_clear(&*flags_text, F_LI_START);
+                }
+                let last = el.last_in_text_node();
+                if let Some(code) =
+                    text_piece(&mut text_carry, el.as_str(), last, crate::code_text_opt)
+                {
+                    *el.as_mut_str() = code;
+                }
+                return Ok(());
+            }
+
             let s = el.as_str();
 
-            if in_table_now && is_ascii_ws_only(s) {
+            // A held entity is text, so the piece after it is never dropped.
+            let held = !text_carry.is_empty();
+
+            if in_table_now && !held && is_ascii_ws_only(s) {
                 *el.as_mut_str() = String::new();
                 return Ok(());
             }
 
             if li_start_now {
-                if is_ascii_ws_only(s) {
+                if !held && is_ascii_ws_only(s) {
                     *el.as_mut_str() = String::new();
                     return Ok(());
                 }
@@ -331,7 +592,10 @@ pub fn get_rewriter_settings_send(
             }
 
             // Only allocate if escaping is actually needed
-            if let Some(escaped) = crate::replace_markdown_chars_opt(s) {
+            let last = el.last_in_text_node();
+            if let Some(escaped) =
+                text_piece(&mut text_carry, s, last, crate::replace_markdown_chars_opt)
+            {
                 *el.as_mut_str() = escaped;
             }
             Ok(())
@@ -368,22 +632,79 @@ pub fn get_rewriter_settings_send(
 
     // ELEMENT HANDLER (send): set/clear packed flags + call handle_tag_send
     let flags_el = flags.clone();
+    let table_head_el = table_head.clone();
     element_content_handlers.push(element!("*", move |el| {
         // The tag name is an allocation, so it is read once per element.
         let tag_name = el.tag_name();
 
-        // table start
-        if tag_name == "table" {
-            flag_set(&*flags_el, F_IN_TABLE);
+        let f = flags_el.load(Ordering::Relaxed);
 
+        // Inside a `<pre>` a tag is highlighting or a line wrapper. It
+        // writes no markdown; only its text is kept, and a `<br>` is a line
+        // break.
+        if (f & F_IN_PRE) != 0 {
+            el.remove_and_keep_content();
+            if tag_name == "br" {
+                el.after("\n", lol_html::html_content::ContentType::Text);
+            }
+            return Ok(());
+        }
+
+        // Code start: text is code until the end tag. A `<pre>` with no end
+        // tag runs to the end of the page, as it does in a browser.
+        let is_pre = tag_name == "pre";
+        if is_pre || ((tag_name == "code" || tag_name == "samp") && (f & F_IN_CODE) == 0) {
             if let Some(hvec) = el.end_tag_handlers() {
+                flag_set(&*flags_el, if is_pre { F_IN_PRE } else { F_IN_CODE });
                 let flags_end = flags_el.clone();
                 let h: EndHandler =
                     Box::new(move |_end: &mut lol_html::html_content::EndTag<'_>| {
-                        flag_clear(&*flags_end, F_IN_TABLE);
+                        flag_clear(&*flags_end, F_IN_PRE | F_IN_CODE);
                         Ok(())
                     });
                 hvec.push(h);
+            }
+        }
+
+        // table start
+        if tag_name == "table" {
+            flag_set(&*flags_el, F_IN_TABLE);
+            table_head_el.store(0, Ordering::Relaxed);
+
+            if let Some(hvec) = el.end_tag_handlers() {
+                let flags_end = flags_el.clone();
+                let table_head_end = table_head_el.clone();
+                let h: EndHandler =
+                    Box::new(move |end: &mut lol_html::html_content::EndTag<'_>| {
+                        flag_clear(&*flags_end, F_IN_TABLE);
+                        // A table that is one header row still gets its
+                        // delimiter row.
+                        if let Some(row) =
+                            table_delimiter(table_head_end.swap(0, Ordering::Relaxed))
+                        {
+                            end.before(&row, lol_html::html_content::ContentType::Html);
+                        }
+                        Ok(())
+                    });
+                hvec.push(h);
+            }
+        } else if (f & F_IN_TABLE) != 0 {
+            if tag_name == "tr" {
+                let (next, delimiter) = table_row(table_head_el.load(Ordering::Relaxed));
+                table_head_el.store(next, Ordering::Relaxed);
+                if let Some(row) = delimiter {
+                    el.before(&row, lol_html::html_content::ContentType::Html);
+                }
+            } else if tag_name == "th" || tag_name == "td" {
+                // Only the first row decides the delimiter row, so the
+                // cells of every later row cost nothing here.
+                let state = table_head_el.load(Ordering::Relaxed);
+                if state & T_ROWS == 1 {
+                    let header = tag_name == "th"
+                        && !spans_cells(el.get_attribute("colspan"))
+                        && !spans_cells(el.get_attribute("rowspan"));
+                    table_head_el.store(table_cell(state, header), Ordering::Relaxed);
+                }
             }
         }
 
@@ -430,6 +751,12 @@ pub fn get_rewriter_settings_send(
 
     lol_html::send::Settings {
         document_content_handlers: vec![
+            doc_text!(move |c| {
+                if !text_seen.swap(false, Ordering::Relaxed) {
+                    strip_unseen_markers(c);
+                }
+                Ok(())
+            }),
             doc_comments!(|c| {
                 c.remove();
                 Ok(())
@@ -441,6 +768,16 @@ pub fn get_rewriter_settings_send(
         ],
         element_content_handlers,
         ..lol_html::send::Settings::new_send()
+    }
+}
+
+/// Drop marker bytes from a text chunk the text handler never saw: text
+/// outside every element, or inside one its selector skips. Text the handler
+/// sees has its markers dropped there, so this looks at the other text only,
+/// and only text that holds a marker byte is copied.
+fn strip_unseen_markers(chunk: &mut lol_html::html_content::TextChunk<'_>) {
+    if let std::borrow::Cow::Owned(kept) = crate::strip_sift_markers(chunk.as_str()) {
+        *chunk.as_mut_str() = kept;
     }
 }
 
