@@ -71,17 +71,23 @@ fn apply_quote_prefix(text_chunk: &mut TextChunk<'_>, quote_depth: &AtomicUsize)
     // This replaces the chunk, so the text handler's marker drop is lost.
     // Drop literal marker bytes here as well.
     // Only text that holds a marker byte is copied.
+    // One scan counts the newlines for the capacity estimate and finds any
+    // marker byte.
+    let raw = text_chunk.as_str();
+    let mut newline_count = 0usize;
+    let mut has_marker = false;
+    for &b in raw.as_bytes() {
+        newline_count += usize::from(b == b'\n');
+        has_marker |= crate::is_sift_marker(b);
+    }
     let stripped: String;
-    let text: &str = if text_chunk.as_str().bytes().any(crate::is_sift_marker) {
-        stripped = crate::strip_sift_markers(text_chunk.as_str()).into_owned();
+    let text: &str = if has_marker {
+        stripped = crate::strip_sift_markers(raw).into_owned();
         &stripped
     } else {
-        text_chunk.as_str()
+        raw
     };
     let last = text_chunk.last_in_text_node();
-
-    // Count newlines for capacity estimate (single byte scan)
-    let newline_count = text.as_bytes().iter().filter(|&&b| b == b'\n').count();
     let estimated_size = text.len() + quote_prefix.len() * (newline_count + 1);
     let mut modified_text = String::with_capacity(estimated_size);
 

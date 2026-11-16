@@ -305,21 +305,17 @@ impl SiftSink {
         };
         let bytes = self.finish_carry(piece);
         let len = bytes.len();
-        let mut ind = 0usize;
+        // A piece that starts inside a code block copies it first. Code is
+        // entered and left only through `code_runs`, so the prose loop below
+        // never tests for it.
+        let mut ind = if self.in_code {
+            self.code_runs(bytes, 0)
+        } else {
+            0
+        };
 
         while ind < len {
-            if self.in_code {
-                ind = self.code_run(bytes, ind);
-                continue;
-            }
-
             let b = bytes[ind];
-
-            if b == CODE_BLOCK_OPEN {
-                self.open_code();
-                ind += 1;
-                continue;
-            }
 
             if b >= 0x80 {
                 let end = ind + sequence_len(b);
@@ -342,6 +338,11 @@ impl SiftSink {
             if self.line_start {
                 if is_ascii_whitespace(b) || is_link_label_marker(b) || b == CODE_BLOCK_CLOSE {
                     ind += 1;
+                    continue;
+                }
+                if b == CODE_BLOCK_OPEN {
+                    self.open_code();
+                    ind = self.code_runs(bytes, ind + 1);
                     continue;
                 }
                 // The first kept byte of the line. Every flag is clear here,
@@ -381,6 +382,9 @@ impl SiftSink {
                 }
                 self.label_trim = false;
                 self.last_carriage_return = false;
+            } else if b == CODE_BLOCK_OPEN {
+                self.open_code();
+                ind = self.code_runs(bytes, ind);
             } else if b == CODE_BLOCK_CLOSE {
                 // A close with no open block. Nothing to end, drop it.
             } else {
@@ -566,6 +570,16 @@ impl SiftSink {
         self.line_start = true;
         self.last_whitespace = false;
         self.last_carriage_return = false;
+    }
+
+    /// Copy the open code block from `ind` until it closes or the piece ends.
+    /// Returns the index after what was consumed.
+    #[inline]
+    fn code_runs(&mut self, bytes: &[u8], mut ind: usize) -> usize {
+        while self.in_code && ind < bytes.len() {
+            ind = self.code_run(bytes, ind);
+        }
+        ind
     }
 
     /// Copy code block bytes as they are, from `ind` up to the close marker

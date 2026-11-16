@@ -236,11 +236,41 @@ const fn is_special_byte(b: u8) -> bool {
     needs_escape(b) || b == b'&'
 }
 
+/// Scan classes, one table load per byte instead of a chain of compares.
+/// `SCAN_TEXT`: the text escape scan stops here. `SCAN_CODE`: the code text
+/// scan stops here.
+const SCAN_TEXT: u8 = 1;
+const SCAN_CODE: u8 = 2;
+
+const SCAN_TABLE: [u8; 256] = {
+    let mut table = [0u8; 256];
+    let mut b = 0usize;
+    while b < 256 {
+        let byte = b as u8;
+        let mut class = 0;
+        if is_special_byte(byte) || is_sift_marker(byte) {
+            class |= SCAN_TEXT;
+        }
+        if byte == b'&' || is_sift_marker(byte) {
+            class |= SCAN_CODE;
+        }
+        table[b] = class;
+        b += 1;
+    }
+    table
+};
+
 /// Bytes the text escape scan stops on: the special bytes plus the sift
 /// markers, which are dropped from page text.
-#[inline]
+#[inline(always)]
 const fn is_text_scan_byte(b: u8) -> bool {
-    is_special_byte(b) || is_sift_marker(b)
+    SCAN_TABLE[b as usize] & SCAN_TEXT != 0
+}
+
+/// Bytes the code text scan stops on: `&` and the sift markers.
+#[inline(always)]
+const fn is_code_scan_byte(b: u8) -> bool {
+    SCAN_TABLE[b as usize] & SCAN_CODE != 0
 }
 
 /// Check if a string contains any characters that need markdown escaping.
@@ -431,7 +461,7 @@ fn decode_code_entity(bytes: &[u8]) -> Option<(char, usize)> {
 #[inline]
 pub(crate) fn code_text_opt(input: &str) -> Option<String> {
     let bytes = input.as_bytes();
-    let first = bytes.iter().position(|&b| b == b'&' || is_sift_marker(b))?;
+    let first = bytes.iter().position(|&b| is_code_scan_byte(b))?;
 
     let mut output = String::with_capacity(input.len());
     output.push_str(input.get(..first)?);
@@ -454,10 +484,7 @@ pub(crate) fn code_text_opt(input: &str) -> Option<String> {
         } else {
             let start = i;
             i += 1;
-            while bytes
-                .get(i)
-                .is_some_and(|&b| b != b'&' && !is_sift_marker(b))
-            {
+            while bytes.get(i).is_some_and(|&b| !is_code_scan_byte(b)) {
                 i += 1;
             }
             // Both ends sit next to ASCII bytes or the ends of the input, so

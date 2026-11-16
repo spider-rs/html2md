@@ -64,11 +64,21 @@ fn resolve_href<'a>(href: &'a str, url: &Option<Url>) -> (Cow<'a, str>, bool) {
 /// class decides it, never the text, so a heading whose text is a link keeps
 /// it.
 #[inline]
-fn is_permalink(class: Option<String>) -> bool {
+fn is_permalink_class(class: Option<String>) -> bool {
     class.is_some_and(|c| {
         c.split_ascii_whitespace()
             .any(|t| t == "headerlink" || t == "hash-link")
     })
+}
+
+/// True when the anchor could be a heading permalink, so its class has to be
+/// read. A permalink links to its own heading: its `href` holds a fragment
+/// or is absent, and it has an attribute besides `href`. Every other anchor
+/// is ruled out here without the class lookup, which allocates once for the
+/// name and once per attribute.
+#[inline]
+fn may_be_permalink(href: Option<&str>, attributes: usize) -> bool {
+    href.map_or(true, |h| h.contains('#')) && attributes > usize::from(href.is_some())
 }
 
 /// Rewrite the anchor.
@@ -77,11 +87,14 @@ pub(crate) fn rewrite_anchor_element(
     _commonmark: bool,
     url: &Option<Url>,
 ) -> Result<(), std::io::Error> {
-    if is_permalink(el.get_attribute("class")) {
+    let href = el.get_attribute("href");
+    if may_be_permalink(href.as_deref(), el.attributes().len())
+        && is_permalink_class(el.get_attribute("class"))
+    {
         el.remove();
         return Ok(());
     }
-    if let Some(href) = el.get_attribute("href") {
+    if let Some(href) = href {
         let (resolved_url, needs_brackets) = resolve_href(&href, url);
         el.before(LINK_LABEL_OPEN_STR, Html);
         el.after(&build_link_suffix(&resolved_url, needs_brackets), Html);
@@ -95,11 +108,14 @@ pub(crate) fn rewrite_anchor_element_send(
     _commonmark: bool,
     url: &Option<Url>,
 ) -> Result<(), std::io::Error> {
-    if is_permalink(el.get_attribute("class")) {
+    let href = el.get_attribute("href");
+    if may_be_permalink(href.as_deref(), el.attributes().len())
+        && is_permalink_class(el.get_attribute("class"))
+    {
         el.remove();
         return Ok(());
     }
-    if let Some(href) = el.get_attribute("href") {
+    if let Some(href) = href {
         let (resolved_url, needs_brackets) = resolve_href(&href, url);
         el.before(LINK_LABEL_OPEN_STR, Html);
         el.after(&build_link_suffix(&resolved_url, needs_brackets), Html);

@@ -76,11 +76,12 @@ const F_IN_CODE: u8 = 1 << 3;
 /// most nine bytes, until the next piece of the same node. `last` is the
 /// node's final piece, which flushes it, so nothing is held past the node.
 /// Returns `None` when the piece is already what should be written.
-fn text_piece(
+#[inline(always)]
+fn text_piece<F: Fn(&str) -> Option<String>>(
     carry: &mut String,
     piece: &str,
     last: bool,
-    rewrite: fn(&str) -> Option<String>,
+    rewrite: F,
 ) -> Option<String> {
     if carry.is_empty() {
         let cut = if last {
