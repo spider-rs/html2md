@@ -1,8 +1,19 @@
 //! The whitespace sift must give the same bytes as the sift it replaced.
 //!
 //! `support/legacy_sifter.rs` is the sifter as it stood before the single pass
-//! rewrite, copied without edits. Every test here feeds both the same input and
-//! compares the output byte for byte.
+//! rewrite. Every test here feeds both the same input and compares the output
+//! byte for byte.
+//!
+//! Two rules were added to the sift after that file was frozen, and the
+//! oracle follows them this way:
+//!
+//! - A link label that opens inside an open one restarts it. That is one
+//!   marked edit in the frozen file, and `nested_label_restarts` below pins
+//!   the rule by itself, without the oracle.
+//! - Code blocks are copied between two marker bytes the old sifter never
+//!   knew. The fixture tests cut every code block out of the rewriter output
+//!   before both sifts see it, so they compare everything outside code.
+//!   `tests/code_blocks.rs` covers what is inside.
 #![cfg(all(feature = "rewriter", feature = "stream"))]
 
 use html2md::extended::sifter::{WhitespaceSifter, WhitespaceSifterBytes};
@@ -76,6 +87,12 @@ fn every_scalar_matches_legacy() {
     let mut input = Vec::with_capacity(32);
 
     for code in 0u32..=0x10_FFFF {
+        // The two code block markers are the one place the sifts are meant
+        // to differ (see the file comment). The rewriter drops both from
+        // page text, so the sift only ever sees the ones it wrote.
+        if code == 0x0E || code == 0x0F {
+            continue;
+        }
         let Some(ch) = char::from_u32(code) else {
             continue;
         };
@@ -264,12 +281,45 @@ fn fixtures() -> Vec<(String, String)> {
     found
 }
 
+/// Raw rewriter output with each code block, markers included, replaced by a
+/// newline. An open marker with no close takes the rest of the input.
+fn without_code_blocks(raw: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(raw.len());
+    let mut in_code = false;
+    for &b in raw {
+        match b {
+            0x0E if !in_code => {
+                in_code = true;
+                out.push(b'\n');
+            }
+            0x0F if in_code => in_code = false,
+            0x0E | 0x0F => {}
+            _ if in_code => {}
+            _ => out.push(b),
+        }
+    }
+    out
+}
+
+/// The restart rule stated without the oracle: the second open ends the
+/// first label's folding, so text after the inner close keeps its newline.
+#[test]
+fn nested_label_restarts() {
+    let input = b"[\x02 never  closed\n[\x02 inner\n text \x03](u)\nline one\nline two\n";
+    assert_eq!(
+        new_lines(input),
+        "[never closed [inner text](u)\nline one\nline two"
+    );
+    assert_eq!(new_lines(input), legacy_lines(input));
+}
+
 /// The real input of the sift: what the rewriter emits for each fixture.
 #[test]
 fn rewriter_output_matches_legacy() {
     for (name, html) in fixtures() {
         for commonmark in [false, true] {
             let raw: Vec<u8> = raw_rewriter_chunks(&html, commonmark, 8192).concat();
+            let raw = without_code_blocks(&raw);
             let want = legacy_lines(&raw);
             let got = new_lines(&raw);
             assert!(want == got, "{name} commonmark={commonmark}: sift differs");
@@ -284,6 +334,7 @@ fn rewriter_output_matches_legacy() {
 fn newline_cut_segments_match_legacy() {
     for (name, html) in fixtures() {
         let raw: Vec<u8> = raw_rewriter_chunks(&html, true, 8192).concat();
+        let raw = without_code_blocks(&raw);
         for (index, segment) in raw.split_inclusive(|b| *b == b'\n').enumerate() {
             let want = legacy_lines(segment);
             let got = new_lines(segment);

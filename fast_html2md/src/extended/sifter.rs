@@ -1,4 +1,6 @@
-use crate::{is_link_label_marker, LINK_LABEL_CLOSE, LINK_LABEL_OPEN};
+use crate::{
+    is_link_label_marker, CODE_BLOCK_CLOSE, CODE_BLOCK_OPEN, LINK_LABEL_CLOSE, LINK_LABEL_OPEN,
+};
 use auto_encoder::auto_encode_bytes;
 
 /// Character handling bytes.
@@ -228,9 +230,19 @@ const fn is_checked_lead(b: u8) -> bool {
 /// whitespace run, newlines included, becomes one space, and the label is
 /// trimmed at both ends, the way a browser renders inline anchor text. Both
 /// markers are dropped.
+/// A label that opens inside an open one restarts it: anchors do
+/// not nest, so the open one was never closed.
 ///
-/// Outside a link label no state survives a newline, so input cut at such a
-/// newline and sifted piece by piece gives the same lines.
+/// Code blocks: the rewriter writes `CODE_BLOCK_OPEN` before a `<pre>` and
+/// `CODE_BLOCK_CLOSE` after it. The sink writes the two fences itself, each on
+/// its own line, and copies the bytes between the markers untouched, so
+/// indentation, blank lines and runs of spaces survive. It drops the one
+/// newline HTML ignores right after `<pre>` and the whitespace before the
+/// closing fence. A code block ends any open link label. Input that ends
+/// inside a code block still gets its closing fence.
+///
+/// Outside a link label and a code block no state survives a newline, so
+/// input cut at such a newline and sifted piece by piece gives the same lines.
 pub(crate) struct SiftSink {
     out: String,
     /// True until the first kept byte of the current line.
@@ -245,6 +257,18 @@ pub(crate) struct SiftSink {
     label_start: usize,
     /// True right after a label opens, until its first non-whitespace byte.
     label_trim: bool,
+    /// True between `CODE_BLOCK_OPEN` and `CODE_BLOCK_CLOSE`.
+    in_code: bool,
+    /// `out.len()` right after the opening fence of the open code block.
+    code_start: usize,
+    /// True until the first byte of the code block has been looked at.
+    code_first: bool,
+    /// `out.len()` right after the last code byte that is not whitespace.
+    code_kept: usize,
+    /// Backticks at the end of the code written so far.
+    tick_run: u32,
+    /// The longest run of backticks in the open code block.
+    tick_max: u32,
     /// The first bytes of a multibyte sequence cut by the end of a piece.
     carry: [u8; 4],
     carry_len: usize,
@@ -261,6 +285,12 @@ impl SiftSink {
             label_depth: 0,
             label_start: 0,
             label_trim: false,
+            in_code: false,
+            code_start: 0,
+            code_first: false,
+            code_kept: 0,
+            tick_run: 0,
+            tick_max: 0,
             carry: [0; 4],
             carry_len: 0,
         }
@@ -268,12 +298,28 @@ impl SiftSink {
 
     /// Sift the next piece of input.
     pub(crate) fn push(&mut self, piece: &[u8]) {
+        let piece = if self.in_code && self.carry_len != 0 {
+            self.finish_code_carry(piece)
+        } else {
+            piece
+        };
         let bytes = self.finish_carry(piece);
         let len = bytes.len();
         let mut ind = 0usize;
 
         while ind < len {
+            if self.in_code {
+                ind = self.code_run(bytes, ind);
+                continue;
+            }
+
             let b = bytes[ind];
+
+            if b == CODE_BLOCK_OPEN {
+                self.open_code();
+                ind += 1;
+                continue;
+            }
 
             if b >= 0x80 {
                 let end = ind + sequence_len(b);
@@ -294,7 +340,7 @@ impl SiftSink {
             }
 
             if self.line_start {
-                if is_ascii_whitespace(b) || is_link_label_marker(b) {
+                if is_ascii_whitespace(b) || is_link_label_marker(b) || b == CODE_BLOCK_CLOSE {
                     ind += 1;
                     continue;
                 }
@@ -313,10 +359,12 @@ impl SiftSink {
             if is_ascii_whitespace(b) {
                 self.whitespace(b);
             } else if b == LINK_LABEL_OPEN {
-                if self.label_depth == 0 {
-                    self.label_start = self.out.len();
-                }
-                self.label_depth = self.label_depth.saturating_add(1);
+                // A label that opens inside an open one restarts it. Anchors
+                // do not nest in HTML, so the open one is an `<a>` the page
+                // never closed, and counting it would fold the rest of the
+                // page onto its line.
+                self.label_start = self.out.len();
+                self.label_depth = 1;
                 self.label_trim = true;
                 // The `[` before the marker is never a space, so this is
                 // already false. Keep the close-side pop label-local.
@@ -333,6 +381,8 @@ impl SiftSink {
                 }
                 self.label_trim = false;
                 self.last_carriage_return = false;
+            } else if b == CODE_BLOCK_CLOSE {
+                // A close with no open block. Nothing to end, drop it.
             } else {
                 self.last_whitespace = false;
                 self.last_carriage_return = false;
@@ -344,6 +394,13 @@ impl SiftSink {
 
     /// End the input and return the sifted text.
     pub(crate) fn finish(mut self) -> String {
+        if self.in_code {
+            // The input ends inside a code block: a `<pre>` the page never
+            // closes. A sequence cut by the end of the input writes nothing.
+            self.carry_len = 0;
+            self.close_code();
+        }
+
         if self.carry_len != 0 && !self.line_start {
             // The input ends inside a multibyte sequence. Nothing is written
             // for it, and it still counts as the last thing on the line, so a
@@ -400,6 +457,235 @@ impl SiftSink {
         if let Some(slot) = self.carry.get_mut(..head.len()) {
             slot.copy_from_slice(head);
             self.carry_len = head.len();
+        }
+    }
+
+    /// Complete a sequence that a piece cut short inside a code block. Only
+    /// continuation bytes are taken, so a malformed sequence never swallows
+    /// the close marker. Returns what is left of `piece`.
+    fn finish_code_carry<'a>(&mut self, piece: &'a [u8]) -> &'a [u8] {
+        let need = sequence_len(self.carry[0]).min(self.carry.len());
+        let mut taken = 0usize;
+
+        while self.carry_len < need {
+            match piece.get(taken) {
+                Some(&b) if (0x80..0xC0).contains(&b) => {
+                    if let Some(slot) = self.carry.get_mut(self.carry_len) {
+                        *slot = b;
+                    }
+                    self.carry_len += 1;
+                    taken += 1;
+                }
+                // The piece ran out. Wait for the next one.
+                None => return &[],
+                // Not a continuation byte: the sequence is malformed.
+                Some(_) => break,
+            }
+        }
+
+        let carry = self.carry;
+        let sequence = carry.get(..self.carry_len).unwrap_or_default();
+        match core::str::from_utf8(sequence) {
+            Ok(text) => self.out.push_str(text),
+            Err(_) => self.out.push_str(&String::from_utf8_lossy(sequence)),
+        }
+        self.carry_len = 0;
+        self.code_kept = self.out.len();
+
+        piece.get(taken..).unwrap_or_default()
+    }
+
+    /// Start a code block: end the current line and any open link label, and
+    /// write the opening fence on a line of its own.
+    fn open_code(&mut self) {
+        if !self.line_start {
+            if self.last_whitespace {
+                self.out.pop();
+            }
+            self.out.push('\n');
+        }
+        self.out.push_str("```\n");
+
+        self.label_depth = 0;
+        self.label_trim = false;
+        self.last_whitespace = false;
+        self.last_carriage_return = false;
+        self.in_code = true;
+        self.code_first = true;
+        self.code_start = self.out.len();
+        self.code_kept = self.code_start;
+        self.tick_run = 0;
+        self.tick_max = 0;
+    }
+
+    /// End the open code block: drop the whitespace after its last line and
+    /// write the closing fence on a line of its own.
+    ///
+    /// Nothing here reads the code again. Where the code ends and how long
+    /// its longest run of backticks is were both counted while it was copied.
+    fn close_code(&mut self) {
+        let kept = self.code_kept.clamp(self.code_start, self.out.len());
+        if self.out.is_char_boundary(kept) {
+            self.out.truncate(kept);
+        }
+        let code_len = self.out.len() - self.code_start;
+
+        // Code that holds a run of three or more backticks, a markdown sample
+        // say, needs a fence longer than its longest run or the run would
+        // close the block early. Both fences grow by the same number of
+        // backticks. The opening fence is already written, so growing it
+        // moves the code up by that many bytes. That move is bounded: a block
+        // over `CODE_FENCE_GROW_MAX` bytes, or a run over
+        // `CODE_FENCE_TICKS_MAX`, keeps the plain three backtick fence.
+        let longest = self.tick_max as usize;
+        let extra =
+            if (3..=CODE_FENCE_TICKS_MAX).contains(&longest) && code_len <= CODE_FENCE_GROW_MAX {
+                longest - 2
+            } else {
+                0
+            };
+        // `code_start` sits right after the opening fence's newline.
+        let at = self.code_start.saturating_sub(1);
+        let extra = if extra != 0 && self.out.is_char_boundary(at) {
+            self.out
+                .insert_str(at, TICKS.get(..extra).unwrap_or_default());
+            extra
+        } else {
+            0
+        };
+
+        if code_len != 0 {
+            self.out.push('\n');
+        }
+        self.out.push_str("```");
+        self.out.push_str(TICKS.get(..extra).unwrap_or_default());
+        self.out.push('\n');
+
+        self.in_code = false;
+        self.code_first = false;
+        self.line_start = true;
+        self.last_whitespace = false;
+        self.last_carriage_return = false;
+    }
+
+    /// Copy code block bytes as they are, from `ind` up to the close marker
+    /// or the end of the piece. Returns the index after what was consumed.
+    ///
+    /// One loop finds the close marker, counts backtick runs for the fence
+    /// length and notes where the last byte that is not whitespace sits, so
+    /// each code byte is looked at once and copied once.
+    fn code_run(&mut self, bytes: &[u8], ind: usize) -> usize {
+        let len = bytes.len();
+        let mut start = ind;
+
+        if self.code_first {
+            // HTML ignores one newline right after `<pre>`.
+            match bytes.get(start) {
+                Some(&CARRIAGE_RETURN) => return start + 1,
+                Some(&LINE_FEED) => start += 1,
+                _ => {}
+            }
+            self.code_first = false;
+        }
+
+        let rest = bytes.get(start..).unwrap_or_default();
+        let mut close = None;
+        let mut ascii = true;
+        // One past the last byte of `rest` that is not ASCII whitespace.
+        let mut text_end = 0usize;
+        let mut tick_run = self.tick_run;
+        let mut tick_max = self.tick_max;
+
+        // True when the loop stopped on a marker it drops rather than the
+        // close marker.
+        let mut dropped_marker = false;
+
+        for (at, &b) in rest.iter().enumerate() {
+            if b == CODE_BLOCK_CLOSE {
+                close = Some(at);
+                break;
+            }
+            if is_link_label_marker(b) || b == CODE_BLOCK_OPEN {
+                // An anchor that opened before the `<pre>` and closes inside
+                // it writes its close marker here, and a `<pre>` inside the
+                // `<pre>` writes an open marker. Neither is code: drop it.
+                // The backtick run goes on across it, since the bytes on
+                // either side end up next to each other.
+                close = Some(at);
+                dropped_marker = true;
+                break;
+            }
+            if b == b'`' {
+                tick_run = tick_run.saturating_add(1);
+                if tick_run > tick_max {
+                    tick_max = tick_run;
+                }
+            } else {
+                tick_run = 0;
+            }
+            if b >= 0x80 {
+                ascii = false;
+            }
+            if !is_ascii_whitespace(b) {
+                text_end = at + 1;
+            }
+        }
+
+        self.tick_run = tick_run;
+        self.tick_max = tick_max;
+
+        let mut stop = start + close.unwrap_or(rest.len());
+
+        if close.is_none() && !ascii {
+            // The piece may end inside a multibyte sequence. Find its first
+            // byte in the last three and keep the cut sequence for the next
+            // piece.
+            let tail_from = stop.saturating_sub(3).max(start);
+            for at in (tail_from..stop).rev() {
+                let b = bytes[at];
+                if b < 0x80 {
+                    break;
+                }
+                if b >= 0xC0 {
+                    if at + sequence_len(b) > stop {
+                        self.start_carry(&bytes[at..stop]);
+                        stop = at;
+                    }
+                    break;
+                }
+            }
+        }
+
+        let run = bytes.get(start..stop).unwrap_or_default();
+        let text_end = text_end.min(run.len());
+        let before = self.out.len();
+        match core::str::from_utf8(run) {
+            Ok(text) => {
+                self.out.push_str(text);
+                if text_end != 0 {
+                    self.code_kept = before + text_end;
+                }
+            }
+            Err(_) => {
+                // Malformed bytes. The part up to the last byte that is not
+                // whitespace goes through the lossy decoder; what follows it
+                // is ASCII whitespace.
+                let (head, tail) = run.split_at(text_end);
+                self.out.push_str(&String::from_utf8_lossy(head));
+                if text_end != 0 {
+                    self.code_kept = self.out.len();
+                }
+                self.out.push_str(&String::from_utf8_lossy(tail));
+            }
+        }
+
+        if dropped_marker {
+            stop + 1
+        } else if close.is_some() {
+            self.close_code();
+            stop + 1
+        } else {
+            len
         }
     }
 
@@ -573,6 +859,17 @@ const fn get_char_metadata(first_byte: u8) -> Character {
         0b1111_0000..=0b1111_1111 => Character::MultiByte { len: 4 },
     }
 }
+
+/// The largest code block, in bytes, whose opening fence is grown when the
+/// code holds a run of three or more backticks. Growing the fence moves the
+/// block up inside the output, so the bound keeps that move a fixed cost.
+const CODE_FENCE_GROW_MAX: usize = 64 * 1024;
+
+/// The longest backtick run inside code that a fence is grown past.
+const CODE_FENCE_TICKS_MAX: usize = 32;
+
+/// Backticks to add to a fence, `CODE_FENCE_TICKS_MAX` of them.
+const TICKS: &str = "````````````````````````````````";
 
 #[allow(clippy::cast_possible_truncation)]
 const SPACE: u8 = ' ' as u32 as u8;

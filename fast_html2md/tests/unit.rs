@@ -200,6 +200,6 @@ pub mod test {
 
         let html = r#"<p>non&nbsp;breaking</p>"#;
         let md = rewrite_html(html, false);
-        assert_eq!(md, "nonbreaking");
+        assert_eq!(md, "non breaking");
     }
 }
