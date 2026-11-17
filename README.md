@@ -49,7 +49,7 @@ assert_eq!(md, "JAMES");
 
 ### About
 
-The features are split to help you choose the library you need. If your project heavily depends on [`scraper`](https://docs.rs/html5ever/latest/html5ever/) and you need to keep the binary small, you can enable just that feature flag. The same applies to the `rewriter` feature using [`lol_html`](https://docs.rs/lol_html/latest/lol_html/). This project is actively used in production at [Spider](https://spider.cloud).
+The features are split to help you choose the library you need. If your project heavily depends on [`scraper`](https://docs.rs/html5ever/latest/html5ever/) and you need to keep the binary small, you can enable just that feature flag. The same applies to the `rewriter` feature using [`lol_html`](https://docs.rs/lol_html/latest/lol_html/). This project is actively used in production at [Spider](https://spider.cloud), where it turns pages into Markdown for the [web scraper API](https://spider.cloud/web-scraper/?utm_source=github&utm_medium=readme&utm_campaign=html2md).
 
 ## License
 
